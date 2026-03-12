@@ -24,7 +24,6 @@ export async function uploadDocuments(
 
 export async function analyzeDeal(params: {
   dealId: string;
-  apiKey: string;
   dealName: string;
   company: string;
   industry: string;
@@ -48,7 +47,6 @@ export async function analyzeDeal(params: {
 
 export async function askDeal(params: {
   dealId: string;
-  apiKey: string;
   question: string;
   dealName: string;
   company: string;

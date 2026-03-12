@@ -50,7 +50,6 @@ export default function DealView() {
     updateDeal,
     setAnalysis,
     setDealStage,
-    apiKey,
     isAnalyzing,
     setIsAnalyzing,
     analysisProgress,
@@ -98,7 +97,7 @@ export default function DealView() {
   );
 
   const handleAnalyze = useCallback(async () => {
-    if (!deal || !apiKey) return;
+    if (!deal) return;
 
     setIsAnalyzing(true);
     setAnalysisProgress('Sending documents to AI for analysis...');
@@ -108,7 +107,6 @@ export default function DealView() {
       setAnalysisProgress('AI is reviewing all documents and extracting key data...');
       const result = await analyzeDeal({
         dealId: deal.id,
-        apiKey,
         dealName: deal.name,
         company: deal.company,
         industry: deal.industry,
@@ -130,7 +128,7 @@ export default function DealView() {
       setIsAnalyzing(false);
       setAnalysisProgress('');
     }
-  }, [deal, apiKey, updateDeal, setAnalysis, setIsAnalyzing, setAnalysisProgress]);
+  }, [deal, updateDeal, setAnalysis, setIsAnalyzing, setAnalysisProgress]);
 
   if (!deal) {
     return (
@@ -141,7 +139,7 @@ export default function DealView() {
   }
 
   const extractedDocs = deal.documents.filter((d) => d.status === 'extracted');
-  const canAnalyze = extractedDocs.length > 0 && apiKey && !isAnalyzing;
+  const canAnalyze = extractedDocs.length > 0 && !isAnalyzing;
   const currentStage = DEAL_STAGES.find((s) => s.id === deal.stage) || DEAL_STAGES[0];
 
   return (

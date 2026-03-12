@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, Loader2, Sparkles } from 'lucide-react';
 import { askDeal } from '../services/api';
-import { useDealStore } from '../store/dealStore';
 import type { Deal } from '../types';
 
 interface Props {
@@ -21,7 +20,6 @@ const STARTER_QUESTIONS = [
 ];
 
 export default function DealQA({ deal }: Props) {
-  const apiKey = useDealStore((s) => s.apiKey);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +34,7 @@ export default function DealQA({ deal }: Props) {
   }, [messages, isLoading]);
 
   const handleSubmit = async (question: string) => {
-    if (!question.trim() || isLoading || !apiKey) return;
+    if (!question.trim() || isLoading) return;
 
     const userMessage: Message = { role: 'user', content: question.trim() };
     setMessages((prev) => [...prev, userMessage]);
@@ -46,7 +44,6 @@ export default function DealQA({ deal }: Props) {
     try {
       const { answer } = await askDeal({
         dealId: deal.id,
-        apiKey,
         question: question.trim(),
         dealName: deal.name,
         company: deal.company,
@@ -76,20 +73,6 @@ export default function DealQA({ deal }: Props) {
     e.preventDefault();
     handleSubmit(input);
   };
-
-  if (!apiKey) {
-    return (
-      <div className="max-w-4xl mx-auto flex flex-col items-center justify-center h-full py-20">
-        <div className="bg-white border border-[#eaeaea] rounded-xl p-8 text-center max-w-md shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-          <MessageCircle className="w-10 h-10 text-[#a1a1a1] mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-[#171717] mb-2">API Key Required</h3>
-          <p className="text-sm text-[#666666]">
-            Please set your OpenAI API key in the settings to use the Deal Q&A feature.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-4xl mx-auto flex flex-col h-full animate-fade-in">

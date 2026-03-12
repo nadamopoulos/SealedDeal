@@ -1,114 +1,15 @@
-import express from 'express';
-import multer from 'multer';
-import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dealDir = path.join(uploadsDir, req.params.dealId || 'tmp');
-    if (!fs.existsSync(dealDir)) fs.mkdirSync(dealDir, { recursive: true });
-    cb(null, dealDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
-
-// Auto-categorize a document by filename
-function categorizeDocument(filename) {
-  const name = filename.toLowerCase();
-  if (/financ|p&l|income|balance|cash.?flow|revenue|ebitda|budget|audit|tax|valuation|model/i.test(name))
-    return 'financial';
-  if (/legal|contract|agreement|compliance|regulat|license|patent|litigation|ip\b|trademark/i.test(name))
-    return 'legal';
-  if (/operat|process|supply|logistics|inventory|manufacturing|quality|kpi|sop|franchise.?agreement/i.test(name))
-    return 'operational';
-  if (/market|industry|compet|landscape|benchmark|customer|segment|tam|sam|research|trend/i.test(name))
-    return 'market';
-  if (/manage|team|org|executive|board|leadership|cv|resume|bio|compensation|hiring/i.test(name))
-    return 'management';
-  return 'other';
-}
-
-// Upload documents
-app.post('/api/deals/:dealId/upload', upload.array('files', 20), async (req, res) => {
-  try {
-    const files = req.files;
-    const results = [];
-
-    for (const file of files) {
-      let extractedText = '';
-      const ext = path.extname(file.originalname).toLowerCase();
-
-      try {
-        if (ext === '.pdf') {
-          const dataBuffer = fs.readFileSync(file.path);
-          const uint8 = new Uint8Array(dataBuffer);
-          const doc = await getDocument({ data: uint8 }).promise;
-          const textParts = [];
-          for (let i = 1; i <= doc.numPages; i++) {
-            const page = await doc.getPage(i);
-            const content = await page.getTextContent();
-            const pageText = content.items.map((item) => item.str).join(' ');
-            textParts.push(`[Page ${i}] ${pageText}`);
-          }
-          extractedText = textParts.join('\n\n');
-          doc.destroy();
-        } else if (ext === '.docx') {
-          const mammoth = await import('mammoth');
-          const result = await mammoth.extractRawText({ path: file.path });
-          extractedText = result.value;
-        } else if (ext === '.txt' || ext === '.csv' || ext === '.md') {
-          extractedText = fs.readFileSync(file.path, 'utf-8');
-        } else if (ext === '.xlsx' || ext === '.xls') {
-          extractedText = `[Spreadsheet file: ${file.originalname} - Please note: spreadsheet data extraction is limited. For best results, export key sheets as CSV.]`;
-        } else {
-          extractedText = `[Unsupported file type: ${ext}. Supported: PDF, DOCX, TXT, CSV, MD]`;
-        }
-      } catch (parseErr) {
-        extractedText = `[Error extracting text from ${file.originalname}: ${parseErr.message}]`;
-      }
-
-      results.push({
-        id: crypto.randomUUID(),
-        name: file.originalname,
-        type: ext.replace('.', ''),
-        size: file.size,
-        extractedText: extractedText.slice(0, 200000),
-        status: extractedText.startsWith('[Error') ? 'error' : 'extracted',
-        category: categorizeDocument(file.originalname),
-      });
-    }
-
-    res.json({ documents: results });
-  } catch (err) {
-    console.error('Upload error:', err);
-    res.status(500).json({ error: err.message });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-});
 
-// Analyze deal
-app.post('/api/deals/:dealId/analyze', async (req, res) => {
   try {
-    const { dealName, company, industry, dealSize, geography, documents } = req.body;
     const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
 
-    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+    const { dealName, company, industry, dealSize, geography, documents } = req.body;
     if (!documents?.length) return res.status(400).json({ error: 'No documents to analyze' });
 
     const client = new Anthropic({ apiKey });
@@ -322,56 +223,4 @@ REQUIREMENTS:
     console.error('Analysis error:', err);
     res.status(500).json({ error: err.message });
   }
-});
-
-// Q&A - Ask the Deal
-app.post('/api/deals/:dealId/qa', async (req, res) => {
-  try {
-    const { question, dealName, company, industry, documents } = req.body;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-
-    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-    if (!question) return res.status(400).json({ error: 'Question required' });
-
-    const client = new Anthropic({ apiKey });
-
-    const allText = documents
-      .filter((d) => d.extractedText && !d.extractedText.startsWith('[Error'))
-      .map((d) => `\n--- DOCUMENT: ${d.name} ---\n${d.extractedText}`)
-      .join('\n\n');
-
-    const truncatedText = allText.slice(0, 150000);
-
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      system: `You are a senior PE due diligence analyst answering questions about a deal.
-Ground every answer in the provided documents. Always cite the source document filename (and page if available).
-If the answer isn't in the documents, say so clearly and suggest what data to request.
-Be precise, quantitative, and action-oriented. Format your response in clear paragraphs.`,
-      messages: [
-        {
-          role: 'user',
-          content: `DEAL: ${dealName} (${company}, ${industry || 'N/A'})
-
-DOCUMENTS:
-${truncatedText}
-
-QUESTION: ${question}
-
-Answer the question based on the documents above. Always cite sources with exact document filenames.`,
-        },
-      ],
-    });
-
-    res.json({ answer: response.content[0].text });
-  } catch (err) {
-    console.error('Q&A error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Howy PE server running on port ${PORT}`);
-});
+}

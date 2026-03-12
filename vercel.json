@@ -2,7 +2,21 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/deals/[dealId]/analyze.js": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "api/deals/[dealId]/upload.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/deals/[dealId]/qa.js": {
+      "maxDuration": 60,
+      "memory": 512
+    }
+  },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

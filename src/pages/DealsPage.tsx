@@ -10,12 +10,11 @@ import {
   ArrowRight,
   Trash2,
   Search,
-  AlertTriangle,
   FolderOpen,
 } from 'lucide-react';
 
 export default function DealsPage() {
-  const { deals, createDeal, deleteDeal, setActiveDeal, apiKey } = useDealStore();
+  const { deals, createDeal, deleteDeal, setActiveDeal } = useDealStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(searchParams.get('new') === '1');
@@ -70,22 +69,6 @@ export default function DealsPage() {
           New Deal
         </button>
       </div>
-
-      {!apiKey && (
-        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-700">API Key Required</p>
-            <p className="text-xs text-amber-700 mt-1">
-              Set your Anthropic API key in{' '}
-              <button onClick={() => navigate('/settings')} className="underline hover:text-amber-700">
-                Settings
-              </button>{' '}
-              to enable AI-powered document analysis.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Create Deal Modal */}
       {showCreate && (

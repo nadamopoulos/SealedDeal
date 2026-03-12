@@ -5,14 +5,12 @@ import type { Deal, DealAnalysis, Document, DealStage, CompanySummary, ScoreSnap
 interface DealStore {
   deals: Deal[];
   activeDealId: string | null;
-  apiKey: string;
   isAnalyzing: boolean;
   analysisProgress: string;
   isAuthenticated: boolean;
 
   login: (password: string) => boolean;
   logout: () => void;
-  setApiKey: (key: string) => void;
   setActiveDeal: (id: string | null) => void;
   setIsAnalyzing: (v: boolean) => void;
   setAnalysisProgress: (msg: string) => void;
@@ -37,7 +35,6 @@ export const useDealStore = create<DealStore>()(
     (set, get) => ({
       deals: [],
       activeDealId: null,
-      apiKey: '',
       isAnalyzing: false,
       analysisProgress: '',
       isAuthenticated: false,
@@ -50,7 +47,6 @@ export const useDealStore = create<DealStore>()(
         return false;
       },
       logout: () => set({ isAuthenticated: false }),
-      setApiKey: (key) => set({ apiKey: key }),
       setActiveDeal: (id) => set({ activeDealId: id }),
       setIsAnalyzing: (v) => set({ isAnalyzing: v }),
       setAnalysisProgress: (msg) => set({ analysisProgress: msg }),
@@ -169,7 +165,6 @@ export const useDealStore = create<DealStore>()(
       name: 'howy-pe-deals',
       partialize: (state) => ({
         deals: state.deals,
-        apiKey: state.apiKey,
         isAuthenticated: state.isAuthenticated,
       }),
     }
