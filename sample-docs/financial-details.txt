@@ -1,0 +1,135 @@
+NOVATECH SOLUTIONS GMBH - DETAILED FINANCIAL ANALYSIS
+
+PROFIT & LOSS STATEMENT (EUR '000)
+====================================
+                        FY2023      FY2024      FY2025
+Revenue - SaaS          20,500      31,100      42,300
+Revenue - Services       2,200       3,500       3,500
+Total Revenue           22,700      34,600      45,800
+
+Cost of Revenue
+  Hosting & Infra       (2,950)     (4,150)     (5,100)
+  Customer Support      (1,800)     (2,600)     (3,200)
+  Professional Services (1,500)     (2,380)     (2,380)
+  Total COGS            (6,250)     (9,130)    (10,680)
+
+Gross Profit            16,450      25,470      35,120
+Gross Margin             72.5%       73.6%       76.7%
+
+Operating Expenses
+  Sales & Marketing     (7,200)     (9,400)    (11,200)
+  R&D                   (5,900)     (8,200)    (12,200)
+  General & Admin       (2,050)     (2,970)     (3,020)
+  Total OpEx           (15,150)    (20,570)    (26,420)
+
+EBITDA                   1,300       4,900       8,700
+EBITDA Margin             5.7%       14.2%       19.0%
+
+Depreciation & Amort      (800)     (1,100)     (1,400)
+EBIT                       500       3,800       7,300
+
+Interest Expense          (150)       (200)       (180)
+Other Income/Expense        50         100         120
+Pre-tax Income             400       3,700       7,240
+
+Tax                       (120)     (1,110)     (2,172)
+Net Income                 280       2,590       5,068
+
+BALANCE SHEET HIGHLIGHTS (EUR '000)
+====================================
+                        FY2023      FY2024      FY2025
+Cash & Equivalents       8,200      10,100      12,400
+Accounts Receivable      4,500       6,800       8,900
+Total Current Assets    13,200      17,800      22,500
+
+Property & Equipment     2,100       3,200       4,100
+Intangible Assets        3,500       4,800       6,200
+Goodwill                     0           0           0
+Total Assets            18,800      25,800      32,800
+
+Accounts Payable         2,100       3,000       3,800
+Deferred Revenue         5,800       8,200      11,500
+Total Current Liabs      8,200      11,800      16,100
+Long-term Debt           3,000       3,000       5,000
+Total Liabilities       11,200      14,800      21,100
+Shareholders' Equity     7,600      11,000      11,700
+
+KEY SaaS METRICS
+====================================
+Monthly Recurring Revenue (MRR):
+  Jan 2025: EUR 3.02M
+  Jun 2025: EUR 3.35M
+  Dec 2025: EUR 3.53M
+
+ARR by Customer Segment:
+  Enterprise (>EUR 500K ACV): EUR 5.08M (12%)
+  Mid-Market (EUR 100-500K): EUR 29.61M (70%)
+  SMB (<EUR 100K): EUR 7.61M (18%)
+
+Cohort Revenue Retention:
+  2022 Cohort (after 3 years): 142%
+  2023 Cohort (after 2 years): 131%
+  2024 Cohort (after 1 year):  118%
+
+Customer Acquisition Costs:
+  Blended CAC: EUR 43,500
+  Enterprise CAC: EUR 112,000
+  Mid-Market CAC: EUR 38,000
+  SMB CAC: EUR 15,000
+
+  CAC Payback Period: 18 months (blended)
+
+Sales Efficiency:
+  Magic Number: 1.2
+  Sales Cycle: Enterprise 6-9 months, Mid-Market 3-4 months
+  Win Rate: 32% (up from 26% in FY2024)
+  Pipeline Coverage: 3.8x
+
+Churn Analysis:
+  Logo Churn Rate: 6% annually
+  Revenue Churn (Gross): 6% annually
+  Revenue Churn (Net): -28% (net expansion)
+
+  Churn Reasons:
+    - M&A/Customer acquired: 35%
+    - Budget cuts: 25%
+    - Competitive loss: 20%
+    - Product fit: 15%
+    - Other: 5%
+
+CASH FLOW STATEMENT (EUR '000)
+====================================
+                        FY2023      FY2024      FY2025
+Cash from Operations      (500)      3,200       6,800
+Cash from Investing     (2,500)     (3,100)     (4,200)
+Cash from Financing      5,000       1,800        (300)
+Net Change in Cash       2,000       1,900       2,300
+
+Free Cash Flow          (3,000)        100       2,600
+FCF Margin               -13.2%       0.3%        5.7%
+
+EMPLOYEE METRICS
+====================================
+Total Employees: 285 (FY2025)
+  Engineering: 112 (39%)
+  Sales & Marketing: 78 (27%)
+  Customer Success: 42 (15%)
+  G&A: 32 (11%)
+  Product: 21 (7%)
+
+Revenue per Employee: EUR 160.7K
+ARR per Employee: EUR 148.4K
+
+Employee Turnover: 14% (FY2025)
+  Voluntary: 11%
+  Involuntary: 3%
+
+Average Salary (fully loaded): EUR 85K
+Glassdoor Rating: 4.2/5.0
+
+NOTES:
+- Deferred revenue increased 40% YoY reflecting strong annual prepayment adoption
+- Professional services revenue flat YoY as company shifts to partner-led implementation
+- R&D capitalization rate: 35% of total R&D spend
+- Accounts receivable DSO: 71 days (industry avg: 55 days) - ABOVE BENCHMARK
+- Working capital requirement increasing faster than revenue growth

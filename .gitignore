@@ -1,0 +1,7 @@
+node_modules/
+dist/
+uploads/
+.claude/
+*.env
+.env.*
+.DS_Store
