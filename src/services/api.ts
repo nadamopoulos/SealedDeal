@@ -118,75 +118,35 @@ export function uploadSingleFile(
 
 /**
  * Upload a large file via Vercel Blob (bypasses serverless 4.5 MB limit).
- * 1. Uploads directly to Blob storage via the client SDK
+ * 1. Uses @vercel/blob/client upload() to send file directly to Blob storage
  * 2. Calls process-blob endpoint to extract text and persist to Redis
- * 3. Blob is deleted after processing
+ * 3. Blob is auto-deleted after processing
  */
 export async function uploadLargeFile(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  // Phase 1: Upload to Vercel Blob via XHR for progress tracking
-  const blobResult = await new Promise<{ url: string }>((resolve, reject) => {
-    // First, get a client token from our blob-upload endpoint
-    fetch(`${API_BASE}/deals/${dealId}/blob-upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'blob.generate-client-token',
-        payload: {
-          callbackUrl: `${window.location.origin}${API_BASE}/deals/${dealId}/blob-upload`,
-          clientPayload: JSON.stringify({ dealId }),
-          pathname: file.name,
-        },
-      }),
-    })
-      .then(async (tokenRes) => {
-        const tokenData = await parseJsonResponse(tokenRes);
-        if (!tokenRes.ok) throw new Error(tokenData.error || 'Failed to get upload token');
-        const clientToken = tokenData.clientToken;
+  // Dynamic import to avoid bundling @vercel/blob/client for small file uploads
+  const { upload } = await import('@vercel/blob/client');
 
-        // Upload directly to Vercel Blob using XHR for progress
-        const xhr = new XMLHttpRequest();
-
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable && onProgress) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-
-        xhr.addEventListener('load', () => {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve(data);
-            } else {
-              reject(new Error(data.error || `Blob upload failed (${xhr.status})`));
-            }
-          } catch {
-            reject(new Error(xhr.responseText?.slice(0, 200) || `Blob upload error (${xhr.status})`));
-          }
-        });
-
-        xhr.addEventListener('error', () => reject(new Error('Network error during blob upload')));
-
-        // Upload to Vercel Blob API
-        xhr.open('PUT', `https://blob.vercel-storage.com/${file.name}`);
-        xhr.setRequestHeader('authorization', `Bearer ${clientToken}`);
-        xhr.setRequestHeader('x-content-type', file.type || 'application/octet-stream');
-        xhr.setRequestHeader('x-cache-control-max-age', '300');
-        xhr.send(file);
-      })
-      .catch(reject);
+  // Phase 1: Upload to Vercel Blob (handles token exchange automatically)
+  const blob = await upload(file.name, file, {
+    access: 'public',
+    handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
+    clientPayload: JSON.stringify({ dealId }),
+    multipart: file.size > 8 * 1024 * 1024, // Use multipart for files > 8 MB
   });
+
+  // Report upload complete
+  if (onProgress) onProgress(100);
 
   // Phase 2: Process the blob (extract text, store in Redis)
   const processRes = await fetch(`${API_BASE}/deals/${dealId}/process-blob`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      blobUrl: blobResult.url,
+      blobUrl: blob.url,
       fileName: file.name,
       fileSize: file.size,
     }),

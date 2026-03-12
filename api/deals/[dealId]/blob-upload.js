@@ -1,34 +1,17 @@
 import { handleUpload } from '@vercel/blob';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Do NOT disable bodyParser — Vercel auto-parses JSON and we need req.body
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Parse body manually since bodyParser is disabled
-  let body;
-  try {
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
-    body = JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return res.status(400).json({ error: 'Invalid JSON body' });
-  }
-
   try {
     const jsonResponse = await handleUpload({
-      body,
+      body: req.body,
       request: req,
       onBeforeGenerateToken: async (pathname) => {
-        // Validate the upload — allow common document types
         return {
           allowedContentTypes: [
             'application/pdf',
@@ -39,6 +22,7 @@ export default async function handler(req, res) {
             'text/plain',
             'text/csv',
             'text/markdown',
+            'application/octet-stream',
           ],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB
           tokenPayload: JSON.stringify({
@@ -47,7 +31,7 @@ export default async function handler(req, res) {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // The blob is uploaded. We'll process it via a separate endpoint call.
+        // Blob upload finished. Processing happens via a separate call to process-blob.
         console.log('Blob upload completed:', blob.pathname, 'size:', blob.size);
       },
     });
