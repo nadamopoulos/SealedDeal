@@ -131,12 +131,25 @@ export async function uploadLargeFile(
   const { upload } = await import('@vercel/blob/client');
 
   // Phase 1: Upload to Vercel Blob (handles token exchange automatically)
-  const blob = await upload(file.name, file, {
-    access: 'public',
-    handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
-    clientPayload: JSON.stringify({ dealId }),
-    multipart: file.size > 8 * 1024 * 1024, // Use multipart for files > 8 MB
-  });
+  let blob;
+  try {
+    blob = await upload(file.name, file, {
+      access: 'public',
+      handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
+      clientPayload: JSON.stringify({ dealId }),
+      multipart: file.size > 8 * 1024 * 1024, // Use multipart for files > 8 MB
+    });
+  } catch (uploadErr: any) {
+    // Provide a clearer error for common issues
+    const msg = uploadErr?.message || '';
+    if (msg.includes('not configured') || msg.includes('BLOB_READ_WRITE_TOKEN')) {
+      throw new Error('Blob storage not configured — add Vercel Blob to your project');
+    }
+    if (msg.includes('FUNCTION_INVOCATION')) {
+      throw new Error(`Server error uploading ${file.name} — check Vercel logs`);
+    }
+    throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
+  }
 
   // Report upload complete
   if (onProgress) onProgress(100);

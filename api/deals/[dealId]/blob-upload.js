@@ -1,10 +1,19 @@
-import { handleUpload } from '@vercel/blob';
+// IMPORTANT: handleUpload is exported from @vercel/blob/client (NOT @vercel/blob)
+import { handleUpload } from '@vercel/blob/client';
 
 // Do NOT disable bodyParser — Vercel auto-parses JSON and we need req.body
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Fail fast if Blob storage is not configured
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.error('BLOB_READ_WRITE_TOKEN is not set — add Vercel Blob storage to the project');
+    return res.status(500).json({
+      error: 'Blob storage not configured. Add Vercel Blob to the project and set BLOB_READ_WRITE_TOKEN.',
+    });
   }
 
   try {
