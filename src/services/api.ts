@@ -66,20 +66,32 @@ export async function deleteDealApi(dealId: string): Promise<void> {
   if (!res.ok) throw new Error(data.error || 'Failed to delete deal');
 }
 
-// ─── Upload (small files direct via XHR, large files via Vercel Blob) ──
+// ─── Upload ──────────────────────────────────────────────────
 
 /** Size threshold: files above this go through Vercel Blob */
 const DIRECT_UPLOAD_LIMIT = 4 * 1024 * 1024; // 4 MB
 
+export interface UploadedDoc {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  uploadedAt: string;
+  status: string;
+  category: DocCategory;
+  extractedText: string;
+  blobUrl?: string;
+}
+
 export interface UploadResult {
-  documents: (Document & { extractedText: string; category: DocCategory })[];
+  documents: UploadedDoc[];
 }
 
 /**
- * Upload a single file to the deal's upload endpoint using XMLHttpRequest
- * so we can track upload progress. For files ≤ 4 MB only.
+ * Upload a small file (≤ 4 MB) via direct XHR with upload progress.
+ * Server extracts text and returns immediately.
  */
-export function uploadSingleFile(
+export function uploadSmallFile(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
@@ -117,45 +129,33 @@ export function uploadSingleFile(
 }
 
 /**
- * Upload a large file via Vercel Blob (bypasses serverless 4.5 MB limit).
- * 1. Uses @vercel/blob/client upload() to send file directly to Blob storage
- * 2. Calls process-blob endpoint to extract text and persist to Redis
- * 3. Blob is auto-deleted after processing
+ * Upload a large file (> 4 MB) to Vercel Blob and register it immediately
+ * WITHOUT extraction. Returns doc metadata with blobUrl.
  */
-export async function uploadLargeFile(
+export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  // Dynamic import to avoid bundling @vercel/blob/client for small file uploads
   const { upload } = await import('@vercel/blob/client');
 
-  // Phase 1: Upload to Vercel Blob (handles token exchange automatically)
   let blob;
   try {
     blob = await upload(file.name, file, {
       access: 'public',
       handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
       clientPayload: JSON.stringify({ dealId }),
-      multipart: file.size > 8 * 1024 * 1024, // Use multipart for files > 8 MB
+      multipart: file.size > 8 * 1024 * 1024,
     });
   } catch (uploadErr: any) {
-    // Provide a clearer error for common issues
     const msg = uploadErr?.message || '';
-    if (msg.includes('not configured') || msg.includes('BLOB_READ_WRITE_TOKEN')) {
-      throw new Error('Blob storage not configured — add Vercel Blob to your project');
-    }
-    if (msg.includes('FUNCTION_INVOCATION')) {
-      throw new Error(`Server error uploading ${file.name} — check Vercel logs`);
-    }
     throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
   }
 
-  // Report upload complete
-  if (onProgress) onProgress(100);
+  if (onProgress) onProgress(90);
 
-  // Phase 2: Process the blob (extract text, store in Redis)
-  const processRes = await fetch(`${API_BASE}/deals/${dealId}/process-blob`, {
+  // Register in Redis immediately (no extraction) — fast
+  const registerRes = await fetch(`${API_BASE}/deals/${dealId}/register-blob`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -165,6 +165,27 @@ export async function uploadLargeFile(
     }),
   });
 
+  const data = await parseJsonResponse(registerRes);
+  if (!registerRes.ok) throw new Error(data.error || 'Failed to register upload');
+
+  if (onProgress) onProgress(100);
+  return data;
+}
+
+/**
+ * Process a previously-uploaded blob: download, extract text, persist.
+ * Called AFTER all uploads are done.
+ */
+export async function processUploadedBlob(
+  dealId: string,
+  doc: { blobUrl: string; fileName: string; fileSize: number }
+): Promise<UploadResult> {
+  const processRes = await fetch(`${API_BASE}/deals/${dealId}/process-blob`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc),
+  });
+
   const data = await parseJsonResponse(processRes);
   if (!processRes.ok) throw new Error(data.error || 'Failed to process uploaded file');
   return data;
@@ -172,6 +193,7 @@ export async function uploadLargeFile(
 
 /**
  * Smart upload: routes to direct upload for small files, Blob for large files.
+ * Small files get extracted inline. Large files are registered without extraction.
  */
 export function uploadFile(
   dealId: string,
@@ -179,9 +201,9 @@ export function uploadFile(
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
   if (file.size > DIRECT_UPLOAD_LIMIT) {
-    return uploadLargeFile(dealId, file, onProgress);
+    return uploadLargeFileToBlobAndRegister(dealId, file, onProgress);
   }
-  return uploadSingleFile(dealId, file, onProgress);
+  return uploadSmallFile(dealId, file, onProgress);
 }
 
 // ─── Analysis (server reads docs from Redis) ─────────────────

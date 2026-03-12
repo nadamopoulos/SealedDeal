@@ -28,18 +28,13 @@ export async function extractText(buffer, filename) {
 
   try {
     if (ext === '.pdf') {
-      const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      // Use pdf-parse v2 (PDFParse class) — properly installed dependency
+      const { PDFParse } = await import('pdf-parse');
       const uint8 = new Uint8Array(buffer);
-      const doc = await getDocument({ data: uint8 }).promise;
-      const textParts = [];
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        const pageText = content.items.map((item) => item.str).join(' ');
-        textParts.push(`[Page ${i}] ${pageText}`);
-      }
-      extractedText = textParts.join('\n\n');
-      doc.destroy();
+      const parser = new PDFParse({ data: uint8 });
+      const result = await parser.getText();
+      extractedText = result.text || '';
+      await parser.destroy();
     } else if (ext === '.docx') {
       const mammoth = await import('mammoth');
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
@@ -52,6 +47,7 @@ export async function extractText(buffer, filename) {
       extractedText = `[Unsupported file type: ${ext}. Supported: PDF, DOCX, TXT, CSV, MD]`;
     }
   } catch (parseErr) {
+    console.error(`Text extraction failed for ${filename}:`, parseErr);
     extractedText = `[Error extracting text from ${filename}: ${parseErr.message}]`;
   }
 
@@ -88,6 +84,27 @@ export async function processFile(buffer, filename, dealId, redis) {
   }
 
   return { docMeta, truncatedText };
+}
+
+/**
+ * Register a file without extraction — just store metadata in Redis.
+ * Returns { docMeta }.
+ */
+export function registerFile(filename, fileSize) {
+  const ext = path.extname(filename || '').toLowerCase();
+  const docId = crypto.randomUUID();
+
+  const docMeta = {
+    id: docId,
+    name: filename,
+    type: ext.replace('.', ''),
+    size: fileSize || 0,
+    uploadedAt: new Date().toISOString(),
+    status: 'pending',
+    category: categorizeDocument(filename || ''),
+  };
+
+  return { docMeta };
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDealStore } from '../store/dealStore';
-import { uploadFile, analyzeDeal } from '../services/api';
+import { uploadFile, processUploadedBlob, analyzeDeal } from '../services/api';
 import type { AnalysisTab, DealStage } from '../types';
 import { DEAL_STAGES } from '../types';
 import DocumentUpload from '../components/DocumentUpload';
@@ -94,8 +94,10 @@ export default function DealView() {
       setUploadProgress(0);
 
       const failedFiles: { name: string; reason: string }[] = [];
+      const pendingBlobs: { blobUrl: string; fileName: string; fileSize: number }[] = [];
       let successCount = 0;
 
+      // ── Phase 1: Upload ALL files fast ──────────────────────
       for (let i = 0; i < files.length; i++) {
         setUploadFileIndex(i);
         setUploadPhase('uploading');
@@ -107,21 +109,28 @@ export default function DealView() {
             setUploadProgress(overallPct);
           });
 
-          // After upload bytes are sent, server is processing/extracting
-          setUploadPhase('processing');
-
-          const docsForCache = result.documents.map((doc) => ({
+          // Add to document list immediately
+          const docsForCache = result.documents.map((doc: any) => ({
             id: doc.id,
             name: doc.name,
             type: doc.type,
             size: doc.size || 0,
             uploadedAt: new Date().toISOString(),
             extractedText: null,
-            status: doc.status as 'extracted' | 'error',
+            status: (doc.status === 'pending' ? 'processing' : doc.status) as 'extracted' | 'error' | 'processing',
             category: doc.category,
           }));
           addDocumentsToCache(deal.id, docsForCache);
           successCount++;
+
+          // Track blob files that need extraction later
+          if (result.documents[0]?.blobUrl) {
+            pendingBlobs.push({
+              blobUrl: result.documents[0].blobUrl,
+              fileName: files[i].name,
+              fileSize: files[i].size,
+            });
+          }
         } catch (err: any) {
           const reason = err.message?.includes('Too Large') || err.message?.includes('PAYLOAD')
             ? `Too large for upload (${(files[i].size / (1024 * 1024)).toFixed(1)} MB)`
@@ -131,6 +140,18 @@ export default function DealView() {
       }
 
       setUploadProgress(100);
+
+      // ── Phase 2: Extract text from blob files (background) ──
+      if (pendingBlobs.length > 0) {
+        setUploadPhase('processing');
+        // Fire-and-forget: extract each blob file, don't block the UI
+        for (const blobInfo of pendingBlobs) {
+          processUploadedBlob(deal.id, blobInfo).catch((err) => {
+            console.warn(`Background extraction failed for ${blobInfo.fileName}:`, err.message);
+          });
+        }
+      }
+
       setUploadPhase('idle');
 
       if (failedFiles.length > 0) {
