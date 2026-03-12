@@ -54,6 +54,18 @@ body {
   animation: pulse-glow 2s infinite;
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-out;
+}
+
 .glass {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);

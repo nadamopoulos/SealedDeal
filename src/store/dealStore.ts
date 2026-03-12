@@ -8,7 +8,10 @@ interface DealStore {
   apiKey: string;
   isAnalyzing: boolean;
   analysisProgress: string;
+  isAuthenticated: boolean;
 
+  login: (password: string) => boolean;
+  logout: () => void;
   setApiKey: (key: string) => void;
   setActiveDeal: (id: string | null) => void;
   setIsAnalyzing: (v: boolean) => void;
@@ -37,7 +40,16 @@ export const useDealStore = create<DealStore>()(
       apiKey: '',
       isAnalyzing: false,
       analysisProgress: '',
+      isAuthenticated: false,
 
+      login: (password) => {
+        if (password === 'HowyBuysCompanies') {
+          set({ isAuthenticated: true });
+          return true;
+        }
+        return false;
+      },
+      logout: () => set({ isAuthenticated: false }),
       setApiKey: (key) => set({ apiKey: key }),
       setActiveDeal: (id) => set({ activeDealId: id }),
       setIsAnalyzing: (v) => set({ isAnalyzing: v }),
@@ -158,6 +170,7 @@ export const useDealStore = create<DealStore>()(
       partialize: (state) => ({
         deals: state.deals,
         apiKey: state.apiKey,
+        isAuthenticated: state.isAuthenticated,
       }),
     }
   )
