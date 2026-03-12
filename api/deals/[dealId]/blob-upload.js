@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
   // Fail fast if Blob storage is not configured
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error('BLOB_READ_WRITE_TOKEN is not set — add Vercel Blob storage to the project');
+    console.error('BLOB_READ_WRITE_TOKEN is not set');
     return res.status(500).json({
       error: 'Blob storage not configured. Add Vercel Blob to the project and set BLOB_READ_WRITE_TOKEN.',
     });
@@ -22,27 +22,15 @@ export default async function handler(req, res) {
       request: req,
       onBeforeGenerateToken: async (pathname) => {
         return {
-          allowedContentTypes: [
-            'application/pdf',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel',
-            'application/msword',
-            'text/plain',
-            'text/csv',
-            'text/markdown',
-            'application/octet-stream',
-          ],
+          // No content-type restriction — validated client-side already
           maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB
           tokenPayload: JSON.stringify({
             dealId: req.query.dealId,
           }),
         };
       },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // Blob upload finished. Processing happens via a separate call to process-blob.
-        console.log('Blob upload completed:', blob.pathname, 'size:', blob.size);
-      },
+      // NOTE: Do NOT define onUploadCompleted — it requires Vercel to call back
+      // to this endpoint which can hang/fail. We process blobs via process-blob instead.
     });
 
     res.json(jsonResponse);
