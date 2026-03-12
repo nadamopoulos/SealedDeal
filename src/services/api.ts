@@ -132,10 +132,11 @@ export function uploadSmallFile(
  * Upload a large file (> 4 MB) to Vercel Blob and register it immediately
  * WITHOUT extraction. Returns doc metadata with blobUrl.
  *
- * Uses a two-step approach instead of @vercel/blob/client's upload():
- * 1. Fetch a client token from our server
- * 2. Use put() with that token to upload directly to Blob storage
- * This avoids upload()'s internal token exchange which hangs on Vercel.
+ * Bypasses @vercel/blob SDK entirely on the client to avoid bundler/undici
+ * issues that cause uploads to hang. Uses raw browser fetch + XHR:
+ * 1. Get a client token from our server
+ * 2. PUT the file directly to Vercel Blob API with XHR (for progress)
+ * 3. Register the blob URL in our backend
  */
 export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
@@ -162,21 +163,48 @@ export async function uploadLargeFileToBlobAndRegister(
     throw new Error(`No client token returned for ${file.name}`);
   }
 
-  if (onProgress) onProgress(10);
+  if (onProgress) onProgress(5);
 
-  // Step 2: Upload directly to Blob storage using client put()
-  const { put } = await import('@vercel/blob/client');
+  // Step 2: Upload directly to Vercel Blob API using raw XHR (for progress tracking)
+  const blobResult = await new Promise<{ url: string; pathname: string }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const params = new URLSearchParams({ pathname: file.name });
+    xhr.open('PUT', `https://vercel.com/api/blob/?${params.toString()}`);
+    xhr.setRequestHeader('authorization', `Bearer ${clientToken}`);
+    xhr.setRequestHeader('x-api-version', '7');
+    xhr.setRequestHeader('x-content-length', String(file.size));
+    xhr.setRequestHeader('x-api-blob-request-id', `sdk:${Date.now()}:${Math.random().toString(16).slice(2)}`);
+    if (file.type) {
+      xhr.setRequestHeader('x-mimeType', file.type);
+    }
 
-  let blob;
-  try {
-    blob = await put(file.name, file, {
-      access: 'public',
-      token: clientToken,
-      contentType: file.type || 'application/octet-stream',
-    });
-  } catch (uploadErr: any) {
-    throw new Error(`Blob upload failed for ${file.name}: ${uploadErr?.message || 'Unknown error'}`);
-  }
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        // Map upload progress to 5-85% range
+        const pct = Math.round(5 + (e.loaded / e.total) * 80);
+        onProgress(pct);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve({ url: data.url, pathname: data.pathname });
+        } catch {
+          reject(new Error(`Blob upload returned invalid JSON for ${file.name}`));
+        }
+      } else {
+        reject(new Error(`Blob upload failed (${xhr.status}) for ${file.name}: ${xhr.responseText?.slice(0, 200)}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error(`Network error uploading ${file.name} to Blob storage`));
+    xhr.ontimeout = () => reject(new Error(`Upload timeout for ${file.name}`));
+    xhr.timeout = 5 * 60 * 1000; // 5 minute timeout
+
+    xhr.send(file);
+  });
 
   if (onProgress) onProgress(90);
 
@@ -185,7 +213,7 @@ export async function uploadLargeFileToBlobAndRegister(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      blobUrl: blob.url,
+      blobUrl: blobResult.url,
       fileName: file.name,
       fileSize: file.size,
     }),
