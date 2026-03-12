@@ -166,16 +166,19 @@ export async function uploadLargeFileToBlobAndRegister(
   if (onProgress) onProgress(5);
 
   // Step 2: Upload directly to Vercel Blob API using raw XHR (for progress tracking)
+  // Headers must match exactly what @vercel/blob SDK sends
   const blobResult = await new Promise<{ url: string; pathname: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const params = new URLSearchParams({ pathname: file.name });
     xhr.open('PUT', `https://vercel.com/api/blob/?${params.toString()}`);
     xhr.setRequestHeader('authorization', `Bearer ${clientToken}`);
-    xhr.setRequestHeader('x-api-version', '7');
+    xhr.setRequestHeader('x-api-version', '12');
     xhr.setRequestHeader('x-content-length', String(file.size));
     xhr.setRequestHeader('x-api-blob-request-id', `sdk:${Date.now()}:${Math.random().toString(16).slice(2)}`);
+    xhr.setRequestHeader('x-api-blob-request-attempt', '0');
+    xhr.setRequestHeader('x-vercel-blob-access', 'public');
     if (file.type) {
-      xhr.setRequestHeader('x-mimeType', file.type);
+      xhr.setRequestHeader('x-content-type', file.type);
     }
 
     xhr.upload.onprogress = (e) => {
