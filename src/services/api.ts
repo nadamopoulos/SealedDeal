@@ -131,30 +131,56 @@ export function uploadSmallFile(
 /**
  * Upload a large file (> 4 MB) to Vercel Blob and register it immediately
  * WITHOUT extraction. Returns doc metadata with blobUrl.
+ *
+ * Uses a two-step approach instead of @vercel/blob/client's upload():
+ * 1. Fetch a client token from our server
+ * 2. Use put() with that token to upload directly to Blob storage
+ * This avoids upload()'s internal token exchange which hangs on Vercel.
  */
 export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  const { upload } = await import('@vercel/blob/client');
+  // Step 1: Get a client token from our server
+  const tokenRes = await fetch(`${API_BASE}/deals/${dealId}/blob-upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'blob.generate-client-token',
+      payload: { pathname: file.name },
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    const err = await tokenRes.text();
+    throw new Error(`Failed to get upload token for ${file.name}: ${err.slice(0, 200)}`);
+  }
+
+  const { clientToken } = await tokenRes.json();
+  if (!clientToken) {
+    throw new Error(`No client token returned for ${file.name}`);
+  }
+
+  if (onProgress) onProgress(10);
+
+  // Step 2: Upload directly to Blob storage using client put()
+  const { put } = await import('@vercel/blob/client');
 
   let blob;
   try {
-    blob = await upload(file.name, file, {
+    blob = await put(file.name, file, {
       access: 'public',
-      handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
-      clientPayload: JSON.stringify({ dealId }),
-      multipart: file.size > 8 * 1024 * 1024,
+      token: clientToken,
+      contentType: file.type || 'application/octet-stream',
     });
   } catch (uploadErr: any) {
-    const msg = uploadErr?.message || '';
-    throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
+    throw new Error(`Blob upload failed for ${file.name}: ${uploadErr?.message || 'Unknown error'}`);
   }
 
   if (onProgress) onProgress(90);
 
-  // Register in Redis immediately (no extraction) — fast
+  // Step 3: Register in Redis immediately (no extraction) — fast
   const registerRes = await fetch(`${API_BASE}/deals/${dealId}/register-blob`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
