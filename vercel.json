@@ -3,6 +3,14 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
+    "api/deals/index.js": {
+      "maxDuration": 10,
+      "memory": 256
+    },
+    "api/deals/[dealId]/index.js": {
+      "maxDuration": 10,
+      "memory": 256
+    },
     "api/deals/[dealId]/analyze.js": {
       "maxDuration": 300,
       "memory": 1024

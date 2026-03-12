@@ -48,10 +48,6 @@ export default function DealQA({ deal }: Props) {
         dealName: deal.name,
         company: deal.company,
         industry: deal.industry,
-        documents: deal.documents.map((d) => ({
-          name: d.name,
-          extractedText: d.extractedText,
-        })),
       });
 
       setMessages((prev) => [...prev, { role: 'assistant', content: answer }]);

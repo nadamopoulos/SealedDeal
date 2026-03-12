@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDealStore } from '../store/dealStore';
-import { uploadDocuments, analyzeDeal } from '../services/api';
+import { uploadSingleFile, analyzeDeal } from '../services/api';
 import type { AnalysisTab, DealStage } from '../types';
 import { DEAL_STAGES } from '../types';
 import DocumentUpload from '../components/DocumentUpload';
@@ -39,17 +39,19 @@ const tabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] = [
   { id: 'documents', label: 'Documents', icon: <FileText className="w-4 h-4" /> },
 ];
 
+export type UploadPhase = 'idle' | 'uploading' | 'processing';
+
 export default function DealView() {
   const { dealId } = useParams<{ dealId: string }>();
   const navigate = useNavigate();
   const {
     getDeal,
     setActiveDeal,
-    addDocument,
-    updateDocument,
+    addDocumentsToCache,
     updateDeal,
     setAnalysis,
     setDealStage,
+    loadDeal,
     isAnalyzing,
     setIsAnalyzing,
     analysisProgress,
@@ -62,38 +64,70 @@ export default function DealView() {
   const [showMemo, setShowMemo] = useState(false);
   const [showStageMenu, setShowStageMenu] = useState(false);
 
+  // Upload progress state
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileIndex, setUploadFileIndex] = useState(0);
+  const [uploadFileCount, setUploadFileCount] = useState(0);
+
   useEffect(() => {
-    if (dealId) setActiveDeal(dealId);
+    if (dealId) {
+      setActiveDeal(dealId);
+      loadDeal(dealId);
+    }
     return () => setActiveDeal(null);
-  }, [dealId, setActiveDeal]);
+  }, [dealId, setActiveDeal, loadDeal]);
+
+  useEffect(() => {
+    if (deal?.analysis && activeTab === 'documents') {
+      setActiveTab('cockpit');
+    }
+  }, [deal?.analysis]);
 
   const handleUpload = useCallback(
     async (files: File[]) => {
       if (!deal) return;
       setUploadError('');
-      updateDeal(deal.id, { status: 'uploading' });
+      setUploadFileCount(files.length);
+      setUploadFileIndex(0);
+      setUploadPhase('uploading');
+      setUploadProgress(0);
 
       try {
-        const result = await uploadDocuments(deal.id, files);
-        for (const doc of result.documents) {
-          addDocument(deal.id, {
+        for (let i = 0; i < files.length; i++) {
+          setUploadFileIndex(i);
+          setUploadPhase('uploading');
+
+          const result = await uploadSingleFile(deal.id, files[i], (pct) => {
+            const fileWeight = 100 / files.length;
+            const overallPct = Math.round((i * fileWeight) + (pct * fileWeight / 100));
+            setUploadProgress(overallPct);
+          });
+
+          // After upload bytes are sent, server is processing/extracting
+          setUploadPhase('processing');
+
+          const docsForCache = result.documents.map((doc) => ({
             id: doc.id,
             name: doc.name,
             type: doc.type,
             size: doc.size || 0,
             uploadedAt: new Date().toISOString(),
-            extractedText: doc.extractedText,
+            extractedText: null,
             status: doc.status as 'extracted' | 'error',
             category: doc.category,
-          });
+          }));
+          addDocumentsToCache(deal.id, docsForCache);
         }
-        updateDeal(deal.id, { status: 'new' });
+
+        setUploadProgress(100);
       } catch (err: any) {
         setUploadError(err.message);
-        updateDeal(deal.id, { status: 'new' });
+      } finally {
+        setUploadPhase('idle');
       }
     },
-    [deal, addDocument, updateDeal]
+    [deal, addDocumentsToCache]
   );
 
   const handleAnalyze = useCallback(async () => {
@@ -101,7 +135,7 @@ export default function DealView() {
 
     setIsAnalyzing(true);
     setAnalysisProgress('Sending documents to AI for analysis...');
-    updateDeal(deal.id, { status: 'analyzing' });
+    await updateDeal(deal.id, { status: 'analyzing' });
 
     try {
       setAnalysisProgress('AI is reviewing all documents and extracting key data...');
@@ -112,10 +146,6 @@ export default function DealView() {
         industry: deal.industry,
         dealSize: deal.dealSize,
         geography: deal.geography,
-        documents: deal.documents.map((d) => ({
-          name: d.name,
-          extractedText: d.extractedText,
-        })),
       });
 
       setAnalysis(deal.id, result.analysis);
@@ -123,7 +153,7 @@ export default function DealView() {
       setAnalysisProgress('');
     } catch (err: any) {
       setUploadError(err.message);
-      updateDeal(deal.id, { status: 'new' });
+      await updateDeal(deal.id, { status: 'new' });
     } finally {
       setIsAnalyzing(false);
       setAnalysisProgress('');
@@ -133,7 +163,8 @@ export default function DealView() {
   if (!deal) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-[#666666]">Deal not found</p>
+        <Loader2 className="w-5 h-5 text-[#0f477b] animate-spin mr-2" />
+        <p className="text-[#666666]">Loading deal...</p>
       </div>
     );
   }
@@ -157,7 +188,6 @@ export default function DealView() {
             <div className="flex-1">
               <div className="flex items-center gap-3">
                 <h1 className="text-lg font-bold text-[#171717]">{deal.name}</h1>
-                {/* Stage Selector */}
                 <div className="relative">
                   <button
                     onClick={() => setShowStageMenu(!showStageMenu)}
@@ -240,7 +270,6 @@ export default function DealView() {
             </div>
           </div>
 
-          {/* Progress */}
           {isAnalyzing && analysisProgress && (
             <div className="mb-3 p-3 bg-[#0f477b]/8 border border-[#0f477b]/15 rounded-lg">
               <div className="flex items-center gap-2">
@@ -260,7 +289,6 @@ export default function DealView() {
             </div>
           )}
 
-          {/* Tabs */}
           <div className="flex gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const disabled = tab.id !== 'documents' && tab.id !== 'qa' && !deal.analysis;
@@ -287,10 +315,16 @@ export default function DealView() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {activeTab === 'documents' && (
-          <DocumentUpload deal={deal} onUpload={handleUpload} />
+          <DocumentUpload
+            deal={deal}
+            onUpload={handleUpload}
+            uploadPhase={uploadPhase}
+            uploadProgress={uploadProgress}
+            uploadFileIndex={uploadFileIndex}
+            uploadFileCount={uploadFileCount}
+          />
         )}
         {activeTab === 'cockpit' && deal.analysis && (
           <DealCockpit analysis={deal.analysis} deal={deal} />
@@ -312,7 +346,6 @@ export default function DealView() {
         )}
       </div>
 
-      {/* IC Memo Modal */}
       {showMemo && deal.analysis && (
         <ICMemoExport deal={deal} analysis={deal.analysis} onClose={() => setShowMemo(false)} />
       )}

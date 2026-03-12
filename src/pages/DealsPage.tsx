@@ -11,14 +11,16 @@ import {
   Trash2,
   Search,
   FolderOpen,
+  Loader2,
 } from 'lucide-react';
 
 export default function DealsPage() {
-  const { deals, createDeal, deleteDeal, setActiveDeal } = useDealStore();
+  const { deals, createDeal, deleteDeal, setActiveDeal, loadDeals, isLoading } = useDealStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(searchParams.get('new') === '1');
   const [search, setSearch] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState({
     name: '',
     company: '',
@@ -30,7 +32,8 @@ export default function DealsPage() {
 
   useEffect(() => {
     setActiveDeal(null);
-  }, [setActiveDeal]);
+    loadDeals();
+  }, [setActiveDeal, loadDeals]);
 
   const filtered = deals.filter(
     (d) =>
@@ -39,12 +42,25 @@ export default function DealsPage() {
       d.industry.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleCreate = () => {
-    if (!form.name || !form.company) return;
-    const deal = createDeal(form);
-    setShowCreate(false);
-    setForm({ name: '', company: '', industry: '', dealSize: '', geography: '', stage: 'screening' as DealStage });
-    navigate(`/deals/${deal.id}`);
+  const handleCreate = async () => {
+    if (!form.name || !form.company || isCreating) return;
+    setIsCreating(true);
+    try {
+      const deal = await createDeal(form);
+      setShowCreate(false);
+      setForm({ name: '', company: '', industry: '', dealSize: '', geography: '', stage: 'screening' as DealStage });
+      navigate(`/deals/${deal.id}`);
+    } catch (err) {
+      console.error('Failed to create deal:', err);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Delete this deal?')) {
+      await deleteDeal(id);
+    }
   };
 
   const getStageInfo = (stageId: string | undefined) => {
@@ -138,13 +154,22 @@ export default function DealsPage() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!form.name || !form.company}
-                className="flex-1 px-4 py-2.5 bg-[#0f477b] hover:bg-[#1a5c9e] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                disabled={!form.name || !form.company || isCreating}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0f477b] hover:bg-[#1a5c9e] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Create Deal
+                {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isCreating ? 'Creating...' : 'Create Deal'}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Loading */}
+      {isLoading && deals.length === 0 && (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-6 h-6 text-[#0f477b] animate-spin" />
+          <span className="ml-2 text-sm text-[#666666]">Loading deals...</span>
         </div>
       )}
 
@@ -163,7 +188,7 @@ export default function DealsPage() {
       )}
 
       {/* Deals Grid */}
-      {filtered.length === 0 ? (
+      {!isLoading && filtered.length === 0 ? (
         <div className="text-center py-20">
           <div className="w-16 h-16 rounded-2xl bg-[#f5f5f5] flex items-center justify-center mx-auto mb-4">
             <FolderOpen className="w-8 h-8 text-[#a1a1a1]" />
@@ -207,7 +232,7 @@ export default function DealsPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm('Delete this deal?')) deleteDeal(deal.id);
+                    handleDelete(deal.id);
                   }}
                   className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#f5f5f5] rounded transition-all"
                 >

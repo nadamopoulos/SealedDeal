@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
+import { useDealStore } from '../store/dealStore';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const loadDeals = useDealStore((s) => s.loadDeals);
+
+  useEffect(() => {
+    loadDeals();
+  }, [loadDeals]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">

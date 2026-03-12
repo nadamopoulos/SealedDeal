@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { redis } from '../../lib/redis.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,8 +10,32 @@ export default async function handler(req, res) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
 
-    const { question, dealName, company, industry, documents } = req.body;
+    const { dealId } = req.query;
+    const { question, dealName, company, industry } = req.body;
     if (!question) return res.status(400).json({ error: 'Question required' });
+
+    // Read deal + doc texts from Redis
+    let documents = [];
+    if (redis) {
+      const raw = await redis.get(`deal:${dealId}`);
+      if (raw) {
+        const deal = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const docMetas = (deal.documents || []).filter(
+          (d) => d.status === 'extracted'
+        );
+        if (docMetas.length > 0) {
+          const textKeys = docMetas.map((d) => `deal:${dealId}:doc:${d.id}`);
+          const texts = await redis.mget(...textKeys);
+          documents = docMetas.map((d, i) => ({
+            name: d.name,
+            extractedText: texts[i] || null,
+          }));
+        }
+      }
+    } else {
+      // Fallback: read from request body (local dev without Redis)
+      documents = req.body.documents || [];
+    }
 
     const client = new Anthropic({ apiKey });
 

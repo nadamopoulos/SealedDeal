@@ -1,5 +1,6 @@
 import Busboy from 'busboy';
 import path from 'path';
+import { redis } from '../../lib/redis.js';
 
 function categorizeDocument(filename) {
   const name = filename.toLowerCase();
@@ -45,8 +46,6 @@ function parseMultipart(req) {
     busboy.on('finish', () => resolve(files));
     busboy.on('error', (err) => reject(err));
 
-    // Vercel pre-buffers the body — if req.body is a Buffer, write it directly.
-    // Otherwise (local Express), pipe the stream.
     if (req.body && Buffer.isBuffer(req.body)) {
       busboy.end(req.body);
     } else if (req.body && typeof req.body === 'string') {
@@ -67,6 +66,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const { dealId } = req.query;
 
   try {
     const files = await parseMultipart(req);
@@ -105,15 +106,48 @@ export default async function handler(req, res) {
         extractedText = `[Error extracting text from ${file.filename}: ${parseErr.message}]`;
       }
 
-      results.push({
-        id: crypto.randomUUID(),
+      const docId = crypto.randomUUID();
+      const truncatedText = extractedText.slice(0, 200000);
+
+      const docMeta = {
+        id: docId,
         name: file.filename,
         type: ext.replace('.', ''),
         size: file.buffer.length,
-        extractedText: extractedText.slice(0, 200000),
+        uploadedAt: new Date().toISOString(),
         status: extractedText.startsWith('[Error') ? 'error' : 'extracted',
         category: categorizeDocument(file.filename || ''),
+      };
+
+      // Persist extracted text to Redis (separate key per doc)
+      if (redis) {
+        try {
+          await redis.set(`deal:${dealId}:doc:${docId}`, truncatedText);
+        } catch (redisErr) {
+          console.error('Redis doc text write error:', redisErr);
+        }
+      }
+
+      results.push({
+        ...docMeta,
+        extractedText: truncatedText,
       });
+    }
+
+    // Update deal in Redis with new document metadata (no extractedText)
+    if (redis) {
+      try {
+        const raw = await redis.get(`deal:${dealId}`);
+        if (raw) {
+          const deal = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const newDocMetas = results.map(({ extractedText, ...meta }) => meta);
+          deal.documents = [...(deal.documents || []), ...newDocMetas];
+          deal.updatedAt = new Date().toISOString();
+          await redis.set(`deal:${dealId}`, JSON.stringify(deal));
+        }
+      } catch (redisErr) {
+        console.error('Redis deal update error:', redisErr);
+      }
     }
 
     res.json({ documents: results });

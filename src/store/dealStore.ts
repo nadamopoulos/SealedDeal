@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Deal, DealAnalysis, Document, DealStage, CompanySummary, ScoreSnapshot } from '../types';
+import {
+  fetchDeals as apiFetchDeals,
+  fetchDeal as apiFetchDeal,
+  createDealApi,
+  updateDealApi,
+  deleteDealApi,
+} from '../services/api';
 
 interface DealStore {
   deals: Deal[];
@@ -8,6 +15,7 @@ interface DealStore {
   isAnalyzing: boolean;
   analysisProgress: string;
   isAuthenticated: boolean;
+  isLoading: boolean;
 
   login: (password: string) => boolean;
   logout: () => void;
@@ -15,16 +23,20 @@ interface DealStore {
   setIsAnalyzing: (v: boolean) => void;
   setAnalysisProgress: (msg: string) => void;
 
-  createDeal: (deal: Omit<Deal, 'id' | 'createdAt' | 'updatedAt' | 'documents' | 'analysis' | 'status' | 'scoreHistory' | 'summaryEdits'>) => Deal;
-  updateDeal: (id: string, updates: Partial<Deal>) => void;
-  deleteDeal: (id: string) => void;
+  // Server-backed operations
+  loadDeals: () => Promise<void>;
+  loadDeal: (id: string) => Promise<void>;
+  createDeal: (
+    deal: Omit<Deal, 'id' | 'createdAt' | 'updatedAt' | 'documents' | 'analysis' | 'status' | 'scoreHistory' | 'summaryEdits'>
+  ) => Promise<Deal>;
+  updateDeal: (id: string, updates: Partial<Deal>) => Promise<void>;
+  deleteDeal: (id: string) => Promise<void>;
   getDeal: (id: string) => Deal | undefined;
-  setDealStage: (id: string, stage: DealStage) => void;
+  setDealStage: (id: string, stage: DealStage) => Promise<void>;
 
-  addDocument: (dealId: string, doc: Document) => void;
-  updateDocument: (dealId: string, docId: string, updates: Partial<Document>) => void;
+  // Local cache operations (upload.js / analyze.js already persist in Redis)
+  addDocumentsToCache: (dealId: string, docs: Document[]) => void;
   removeDocument: (dealId: string, docId: string) => void;
-
   setAnalysis: (dealId: string, analysis: DealAnalysis) => void;
   setSummaryEdits: (dealId: string, edits: Partial<CompanySummary>) => void;
   clearSummaryEdits: (dealId: string) => void;
@@ -38,6 +50,7 @@ export const useDealStore = create<DealStore>()(
       isAnalyzing: false,
       analysisProgress: '',
       isAuthenticated: false,
+      isLoading: false,
 
       login: (password) => {
         if (password === 'HowyBuysCompanies') {
@@ -51,81 +64,125 @@ export const useDealStore = create<DealStore>()(
       setIsAnalyzing: (v) => set({ isAnalyzing: v }),
       setAnalysisProgress: (msg) => set({ analysisProgress: msg }),
 
-      createDeal: (dealData) => {
-        const deal: Deal = {
-          ...dealData,
-          id: crypto.randomUUID(),
-          status: 'new',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          documents: [],
-          analysis: null,
-          scoreHistory: [],
-          summaryEdits: null,
-        };
+      // ─── Server-backed ─────────────────────────────────
+
+      loadDeals: async () => {
+        set({ isLoading: true });
+        try {
+          const { deals } = await apiFetchDeals();
+          set({ deals });
+        } catch (err) {
+          console.error('Failed to load deals:', err);
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      loadDeal: async (id) => {
+        try {
+          const { deal } = await apiFetchDeal(id);
+          set((s) => {
+            const idx = s.deals.findIndex((d) => d.id === id);
+            const updated = [...s.deals];
+            if (idx >= 0) {
+              updated[idx] = { ...updated[idx], ...deal };
+            } else {
+              updated.unshift(deal);
+            }
+            return { deals: updated };
+          });
+        } catch (err) {
+          console.error('Failed to load deal:', err);
+        }
+      },
+
+      createDeal: async (dealData) => {
+        const { deal } = await createDealApi({
+          name: dealData.name,
+          company: dealData.company,
+          industry: dealData.industry,
+          dealSize: dealData.dealSize,
+          geography: dealData.geography,
+          stage: dealData.stage,
+        });
         set((s) => ({ deals: [deal, ...s.deals] }));
         return deal;
       },
 
-      updateDeal: (id, updates) =>
+      updateDeal: async (id, updates) => {
+        // Optimistic local update
         set((s) => ({
           deals: s.deals.map((d) =>
             d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d
           ),
-        })),
+        }));
+        try {
+          await updateDealApi(id, updates);
+        } catch (err) {
+          console.error('Failed to update deal on server:', err);
+        }
+      },
 
-      deleteDeal: (id) =>
+      deleteDeal: async (id) => {
         set((s) => ({
           deals: s.deals.filter((d) => d.id !== id),
           activeDealId: s.activeDealId === id ? null : s.activeDealId,
-        })),
+        }));
+        try {
+          await deleteDealApi(id);
+        } catch (err) {
+          console.error('Failed to delete deal on server:', err);
+        }
+      },
 
       getDeal: (id) => get().deals.find((d) => d.id === id),
 
-      setDealStage: (id, stage) =>
+      setDealStage: async (id, stage) => {
         set((s) => ({
           deals: s.deals.map((d) =>
             d.id === id ? { ...d, stage, updatedAt: new Date().toISOString() } : d
           ),
-        })),
+        }));
+        try {
+          await updateDealApi(id, { stage } as Partial<Deal>);
+        } catch (err) {
+          console.error('Failed to update stage on server:', err);
+        }
+      },
 
-      addDocument: (dealId, doc) =>
+      // ─── Local cache operations ────────────────────────
+
+      addDocumentsToCache: (dealId, docs) =>
         set((s) => ({
           deals: s.deals.map((d) =>
             d.id === dealId
-              ? { ...d, documents: [...d.documents, doc], updatedAt: new Date().toISOString() }
+              ? { ...d, documents: [...d.documents, ...docs], updatedAt: new Date().toISOString() }
               : d
           ),
         })),
 
-      updateDocument: (dealId, docId, updates) =>
-        set((s) => ({
-          deals: s.deals.map((d) =>
-            d.id === dealId
-              ? {
-                  ...d,
-                  documents: d.documents.map((doc) =>
-                    doc.id === docId ? { ...doc, ...updates } : doc
-                  ),
-                }
-              : d
-          ),
-        })),
-
-      removeDocument: (dealId, docId) =>
+      removeDocument: (dealId, docId) => {
         set((s) => ({
           deals: s.deals.map((d) =>
             d.id === dealId
               ? { ...d, documents: d.documents.filter((doc) => doc.id !== docId) }
               : d
           ),
-        })),
+        }));
+        // Also remove from server
+        updateDealApi(dealId, {
+          documents: get()
+            .deals.find((d) => d.id === dealId)
+            ?.documents.filter((doc) => doc.id !== docId),
+        } as Partial<Deal>).catch((err) =>
+          console.error('Failed to remove doc on server:', err)
+        );
+      },
 
       setAnalysis: (dealId, analysis) =>
         set((s) => ({
           deals: s.deals.map((d) => {
             if (d.id !== dealId) return d;
-            // Append score snapshot for timeline
             const snapshot: ScoreSnapshot = {
               score: analysis.cockpit.overallScore,
               rating: analysis.cockpit.overallRating,
@@ -164,7 +221,6 @@ export const useDealStore = create<DealStore>()(
     {
       name: 'howy-pe-deals',
       partialize: (state) => ({
-        deals: state.deals,
         isAuthenticated: state.isAuthenticated,
       }),
     }

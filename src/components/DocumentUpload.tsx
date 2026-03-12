@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useDealStore } from '../store/dealStore';
 import type { Deal, DocCategory } from '../types';
 import { DOC_CATEGORIES } from '../types';
+import type { UploadPhase } from '../pages/DealView';
 import {
   Upload,
   FileText,
@@ -12,17 +13,28 @@ import {
   HardDrive,
   FileType,
   Ban,
+  Loader2,
 } from 'lucide-react';
 
 interface Props {
   deal: Deal;
   onUpload: (files: File[]) => Promise<void>;
+  uploadPhase: UploadPhase;
+  uploadProgress: number;
+  uploadFileIndex: number;
+  uploadFileCount: number;
 }
 
-export default function DocumentUpload({ deal, onUpload }: Props) {
+export default function DocumentUpload({
+  deal,
+  onUpload,
+  uploadPhase,
+  uploadProgress,
+  uploadFileIndex,
+  uploadFileCount,
+}: Props) {
   const { removeDocument } = useDealStore();
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [skippedFiles, setSkippedFiles] = useState<string[]>([]);
   const [activeFilters, setActiveFilters] = useState<Set<DocCategory>>(
     () => new Set(DOC_CATEGORIES.map((c) => c.id))
@@ -80,12 +92,7 @@ export default function DocumentUpload({ deal, onUpload }: Props) {
 
       if (newFiles.length === 0) return;
 
-      setIsUploading(true);
-      try {
-        await onUpload(newFiles);
-      } finally {
-        setIsUploading(false);
-      }
+      await onUpload(newFiles);
     },
     [onUpload, deal.documents]
   );
@@ -142,7 +149,7 @@ export default function DocumentUpload({ deal, onUpload }: Props) {
             <Upload className={`w-6 h-6 ${isDragging ? 'text-[#0f477b]' : 'text-[#888888]'}`} />
           </div>
           <h3 className="text-base font-semibold text-[#171717] mb-1">
-            {isUploading ? 'Uploading & extracting...' : 'Drop data room files here'}
+            {uploadPhase !== 'idle' ? 'Uploading & extracting...' : 'Drop data room files here'}
           </h3>
           <p className="text-sm text-[#666666] mb-4">PDF, DOCX, TXT, CSV supported (up to 50 MB each)</p>
           <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#fafafa] hover:bg-[#f5f5f5] text-[#171717] border border-[#eaeaea] rounded-lg text-sm font-medium cursor-pointer transition-colors">
@@ -158,6 +165,40 @@ export default function DocumentUpload({ deal, onUpload }: Props) {
           </label>
         </div>
       </div>
+
+      {/* Upload Progress Bar */}
+      {uploadPhase !== 'idle' && (
+        <div className="mt-4 p-4 bg-white border border-[#eaeaea] rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-[#0f477b] animate-spin" />
+              <span className="text-sm font-medium text-[#171717]">
+                {uploadPhase === 'uploading'
+                  ? `Uploading file ${uploadFileIndex + 1} of ${uploadFileCount}...`
+                  : `Processing file ${uploadFileIndex + 1} of ${uploadFileCount}...`}
+              </span>
+            </div>
+            <span className="text-xs font-semibold text-[#0f477b]">
+              {uploadPhase === 'uploading' ? `${uploadProgress}%` : 'Extracting text'}
+            </span>
+          </div>
+          <div className="h-2 bg-[#eaeaea] rounded-full overflow-hidden">
+            {uploadPhase === 'uploading' ? (
+              <div
+                className="h-full bg-[#0f477b] rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            ) : (
+              <div className="h-full bg-[#0f477b] rounded-full animate-pulse" style={{ width: '100%' }} />
+            )}
+          </div>
+          <p className="text-xs text-[#888888] mt-1.5">
+            {uploadPhase === 'uploading'
+              ? 'Sending file to server...'
+              : 'Server is extracting text from your document...'}
+          </p>
+        </div>
+      )}
 
       {/* Skipped duplicates notice */}
       {skippedFiles.length > 0 && (

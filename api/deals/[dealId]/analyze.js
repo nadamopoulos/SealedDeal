@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { redis } from '../../lib/redis.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,8 +10,36 @@ export default async function handler(req, res) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
 
-    const { dealName, company, industry, dealSize, geography, documents } = req.body;
-    if (!documents?.length) return res.status(400).json({ error: 'No documents to analyze' });
+    const { dealId } = req.query;
+    const { dealName, company, industry, dealSize, geography } = req.body;
+
+    // Read deal + doc texts from Redis
+    let documents = [];
+    if (redis) {
+      const raw = await redis.get(`deal:${dealId}`);
+      if (!raw) return res.status(404).json({ error: 'Deal not found in database' });
+
+      const deal = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const docMetas = (deal.documents || []).filter((d) => d.status === 'extracted');
+
+      if (docMetas.length === 0) {
+        return res.status(400).json({ error: 'No extracted documents found' });
+      }
+
+      // Batch-read all doc texts
+      const textKeys = docMetas.map((d) => `deal:${dealId}:doc:${d.id}`);
+      const texts = await redis.mget(...textKeys);
+
+      documents = docMetas.map((d, i) => ({
+        name: d.name,
+        extractedText: texts[i] || null,
+      }));
+    } else {
+      // Fallback: read from request body (for local dev without Redis)
+      documents = req.body.documents || [];
+    }
+
+    if (!documents.length) return res.status(400).json({ error: 'No documents to analyze' });
 
     const client = new Anthropic({ apiKey });
 
@@ -218,6 +247,34 @@ REQUIREMENTS:
     }
 
     analysis.analyzedAt = new Date().toISOString();
+
+    // Persist analysis to Redis
+    if (redis) {
+      try {
+        const raw = await redis.get(`deal:${dealId}`);
+        if (raw) {
+          const deal = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          // Append score snapshot
+          const snapshot = {
+            score: analysis.cockpit.overallScore,
+            rating: analysis.cockpit.overallRating,
+            timestamp: new Date().toISOString(),
+            docCount: (deal.documents || []).filter((d) => d.status === 'extracted').length,
+            trigger: deal.analysis
+              ? `Re-analysis (${(deal.documents || []).length} docs)`
+              : `Initial analysis (${(deal.documents || []).length} docs)`,
+          };
+          deal.analysis = analysis;
+          deal.status = 'reviewed';
+          deal.scoreHistory = [...(deal.scoreHistory || []), snapshot];
+          deal.updatedAt = new Date().toISOString();
+          await redis.set(`deal:${dealId}`, JSON.stringify(deal));
+        }
+      } catch (redisErr) {
+        console.error('Redis analysis persist error:', redisErr);
+      }
+    }
+
     res.json({ analysis });
   } catch (err) {
     console.error('Analysis error:', err);
