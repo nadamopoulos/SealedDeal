@@ -132,42 +132,72 @@ export function uploadSmallFile(
  * Upload a large file (> 4 MB) to Vercel Blob and register it immediately
  * WITHOUT extraction. Returns doc metadata with blobUrl.
  *
- * Uses the official @vercel/blob/client upload() which handles:
- * - Browser CORS properly
- * - Multipart upload for large files
- * - Token exchange with our server endpoint
+ * Zero SDK dependency — uses native browser fetch only.
+ * 1. Get client token from our server
+ * 2. PUT file to Vercel Blob API via native fetch (follows redirects)
+ * 3. Register blob URL in our backend
  */
 export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
+  // Step 1: Get a client token from our server
   if (onProgress) onProgress(5);
 
-  // Step 1: Upload to Vercel Blob via SDK (handles token exchange + multipart)
-  const { upload } = await import('@vercel/blob/client');
+  const tokenRes = await fetch(`${API_BASE}/deals/${dealId}/blob-upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'blob.generate-client-token',
+      payload: { pathname: file.name, multipart: false },
+    }),
+  });
 
-  let blob;
-  try {
-    blob = await upload(file.name, file, {
-      access: 'public',
-      handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
-      clientPayload: JSON.stringify({ dealId }),
-      multipart: true,
-    });
-  } catch (uploadErr: any) {
-    const msg = uploadErr?.message || 'Unknown error';
-    throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
+  if (!tokenRes.ok) {
+    const err = await tokenRes.text();
+    throw new Error(`Token request failed for ${file.name}: ${err.slice(0, 200)}`);
+  }
+
+  const { clientToken } = await tokenRes.json();
+  if (!clientToken) {
+    throw new Error(`No client token returned for ${file.name}`);
+  }
+
+  if (onProgress) onProgress(10);
+
+  // Step 2: PUT file directly to Vercel Blob API using native fetch
+  // Native fetch follows redirects automatically (unlike XHR)
+  const params = new URLSearchParams({ pathname: file.name });
+  const blobRes = await fetch(`https://vercel.com/api/blob/?${params.toString()}`, {
+    method: 'PUT',
+    headers: {
+      'authorization': `Bearer ${clientToken}`,
+      'x-api-version': '12',
+      'x-vercel-blob-access': 'public',
+      'x-content-type': file.type || 'application/octet-stream',
+    },
+    body: file,
+  });
+
+  if (!blobRes.ok) {
+    const errText = await blobRes.text().catch(() => '');
+    throw new Error(`Blob upload failed (${blobRes.status}) for ${file.name}: ${errText.slice(0, 200)}`);
+  }
+
+  const blobData = await blobRes.json();
+  if (!blobData.url) {
+    throw new Error(`Blob upload returned no URL for ${file.name}`);
   }
 
   if (onProgress) onProgress(85);
 
-  // Step 2: Register in Redis immediately (no extraction) — fast
+  // Step 3: Register in Redis immediately (no extraction) — fast
   const registerRes = await fetch(`${API_BASE}/deals/${dealId}/register-blob`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      blobUrl: blob.url,
+      blobUrl: blobData.url,
       fileName: file.name,
       fileSize: file.size,
     }),
