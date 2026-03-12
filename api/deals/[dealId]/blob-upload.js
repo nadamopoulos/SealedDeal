@@ -25,10 +25,15 @@ export default async function handler(req, res) {
     if (type === 'blob.generate-client-token') {
       const { pathname } = payload || {};
 
+      // Default validUntil is only 30 seconds — way too short for large
+      // file uploads. Set to 1 hour from now.
+      const validUntil = Date.now() + 60 * 60 * 1000;
+
       const clientToken = await generateClientTokenFromReadWriteToken({
         token: process.env.BLOB_READ_WRITE_TOKEN,
         pathname,
         maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB
+        validUntil,
       });
 
       return res.json({ type, clientToken });
