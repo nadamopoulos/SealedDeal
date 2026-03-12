@@ -18,12 +18,14 @@ export default async function handler(req, res) {
   try {
     const { type, payload } = req.body || {};
 
+    console.log('blob-upload: event type:', type, 'pathname:', payload?.pathname, 'multipart:', payload?.multipart);
+
     // The @vercel/blob/client upload() sends two event types to this endpoint:
     // 1. "blob.generate-client-token" — needs a signed client token to upload
     // 2. "blob.upload-completed"      — notification that upload finished
 
     if (type === 'blob.generate-client-token') {
-      const { pathname } = payload || {};
+      const { pathname, multipart } = payload || {};
 
       // Default validUntil is only 30 seconds — way too short for large
       // file uploads. Set to 1 hour from now.
@@ -34,8 +36,10 @@ export default async function handler(req, res) {
         pathname,
         maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB
         validUntil,
+        multipart: multipart || false,
       });
 
+      console.log('blob-upload: generated token for', pathname, '(multipart:', multipart, ')');
       return res.json({ type, clientToken });
     }
 

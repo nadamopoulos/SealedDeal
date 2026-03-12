@@ -132,91 +132,42 @@ export function uploadSmallFile(
  * Upload a large file (> 4 MB) to Vercel Blob and register it immediately
  * WITHOUT extraction. Returns doc metadata with blobUrl.
  *
- * Bypasses @vercel/blob SDK entirely on the client to avoid bundler/undici
- * issues that cause uploads to hang. Uses raw browser fetch + XHR:
- * 1. Get a client token from our server
- * 2. PUT the file directly to Vercel Blob API with XHR (for progress)
- * 3. Register the blob URL in our backend
+ * Uses the official @vercel/blob/client upload() which handles:
+ * - Browser CORS properly
+ * - Multipart upload for large files
+ * - Token exchange with our server endpoint
  */
 export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  // Step 1: Get a client token from our server
-  const tokenRes = await fetch(`${API_BASE}/deals/${dealId}/blob-upload`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'blob.generate-client-token',
-      payload: { pathname: file.name },
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    throw new Error(`Failed to get upload token for ${file.name}: ${err.slice(0, 200)}`);
-  }
-
-  const { clientToken } = await tokenRes.json();
-  if (!clientToken) {
-    throw new Error(`No client token returned for ${file.name}`);
-  }
-
   if (onProgress) onProgress(5);
 
-  // Step 2: Upload directly to Vercel Blob API using raw XHR (for progress tracking)
-  // Headers must match exactly what @vercel/blob SDK sends
-  const blobResult = await new Promise<{ url: string; pathname: string }>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const params = new URLSearchParams({ pathname: file.name });
-    xhr.open('PUT', `https://vercel.com/api/blob/?${params.toString()}`);
-    xhr.setRequestHeader('authorization', `Bearer ${clientToken}`);
-    xhr.setRequestHeader('x-api-version', '12');
-    xhr.setRequestHeader('x-content-length', String(file.size));
-    xhr.setRequestHeader('x-api-blob-request-id', `sdk:${Date.now()}:${Math.random().toString(16).slice(2)}`);
-    xhr.setRequestHeader('x-api-blob-request-attempt', '0');
-    xhr.setRequestHeader('x-vercel-blob-access', 'public');
-    if (file.type) {
-      xhr.setRequestHeader('x-content-type', file.type);
-    }
+  // Step 1: Upload to Vercel Blob via SDK (handles token exchange + multipart)
+  const { upload } = await import('@vercel/blob/client');
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) {
-        // Map upload progress to 5-85% range
-        const pct = Math.round(5 + (e.loaded / e.total) * 80);
-        onProgress(pct);
-      }
-    };
+  let blob;
+  try {
+    blob = await upload(file.name, file, {
+      access: 'public',
+      handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
+      clientPayload: JSON.stringify({ dealId }),
+      multipart: true,
+    });
+  } catch (uploadErr: any) {
+    const msg = uploadErr?.message || 'Unknown error';
+    throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
+  }
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          resolve({ url: data.url, pathname: data.pathname });
-        } catch {
-          reject(new Error(`Blob upload returned invalid JSON for ${file.name}`));
-        }
-      } else {
-        reject(new Error(`Blob upload failed (${xhr.status}) for ${file.name}: ${xhr.responseText?.slice(0, 200)}`));
-      }
-    };
+  if (onProgress) onProgress(85);
 
-    xhr.onerror = () => reject(new Error(`Network error uploading ${file.name} to Blob storage`));
-    xhr.ontimeout = () => reject(new Error(`Upload timeout for ${file.name}`));
-    xhr.timeout = 5 * 60 * 1000; // 5 minute timeout
-
-    xhr.send(file);
-  });
-
-  if (onProgress) onProgress(90);
-
-  // Step 3: Register in Redis immediately (no extraction) — fast
+  // Step 2: Register in Redis immediately (no extraction) — fast
   const registerRes = await fetch(`${API_BASE}/deals/${dealId}/register-blob`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      blobUrl: blobResult.url,
+      blobUrl: blob.url,
       fileName: file.name,
       fileSize: file.size,
     }),
