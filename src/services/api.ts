@@ -2,6 +2,16 @@ import type { DealAnalysis, Document, DocCategory } from '../types';
 
 const API_BASE = '/api';
 
+/** Safely parse JSON from a response, handling non-JSON error pages */
+async function parseJsonResponse(res: Response) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text.slice(0, 200) || `Server error (${res.status})`);
+  }
+}
+
 export async function uploadDocuments(
   dealId: string,
   files: File[]
@@ -14,12 +24,11 @@ export async function uploadDocuments(
     body: formData,
   });
 
+  const data = await parseJsonResponse(res);
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Upload failed');
+    throw new Error(data.error || 'Upload failed');
   }
-
-  return res.json();
+  return data;
 }
 
 export async function analyzeDeal(params: {
@@ -37,12 +46,11 @@ export async function analyzeDeal(params: {
     body: JSON.stringify(params),
   });
 
+  const data = await parseJsonResponse(res);
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Analysis failed');
+    throw new Error(data.error || 'Analysis failed');
   }
-
-  return res.json();
+  return data;
 }
 
 export async function askDeal(params: {
@@ -59,10 +67,9 @@ export async function askDeal(params: {
     body: JSON.stringify(params),
   });
 
+  const data = await parseJsonResponse(res);
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Q&A failed');
+    throw new Error(data.error || 'Q&A failed');
   }
-
-  return res.json();
+  return data;
 }
