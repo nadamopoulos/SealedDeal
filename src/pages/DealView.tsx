@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDealStore } from '../store/dealStore';
-import { uploadSingleFile, analyzeDeal } from '../services/api';
+import { uploadFile, analyzeDeal } from '../services/api';
 import type { AnalysisTab, DealStage } from '../types';
 import { DEAL_STAGES } from '../types';
 import DocumentUpload from '../components/DocumentUpload';
@@ -100,17 +100,8 @@ export default function DealView() {
         setUploadFileIndex(i);
         setUploadPhase('uploading');
 
-        // Skip files over 4.5 MB (Vercel serverless payload limit)
-        if (files[i].size > 4.5 * 1024 * 1024) {
-          failedFiles.push({
-            name: files[i].name,
-            reason: `Too large (${(files[i].size / (1024 * 1024)).toFixed(1)} MB — max 4.5 MB)`,
-          });
-          continue;
-        }
-
         try {
-          const result = await uploadSingleFile(deal.id, files[i], (pct) => {
+          const result = await uploadFile(deal.id, files[i], (pct) => {
             const fileWeight = 100 / files.length;
             const overallPct = Math.round((i * fileWeight) + (pct * fileWeight / 100));
             setUploadProgress(overallPct);

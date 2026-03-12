@@ -151,7 +151,7 @@ export default function DocumentUpload({
           <h3 className="text-base font-semibold text-[#171717] mb-1">
             {uploadPhase !== 'idle' ? 'Uploading & extracting...' : 'Drop data room files here'}
           </h3>
-          <p className="text-sm text-[#666666] mb-4">PDF, DOCX, TXT, CSV supported (up to 4.5 MB each)</p>
+          <p className="text-sm text-[#666666] mb-4">PDF, DOCX, TXT, CSV supported (up to 100 MB each)</p>
           <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#fafafa] hover:bg-[#f5f5f5] text-[#171717] border border-[#eaeaea] rounded-lg text-sm font-medium cursor-pointer transition-colors">
             <Upload className="w-4 h-4" />
             Browse Files
