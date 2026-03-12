@@ -93,11 +93,23 @@ export default function DealView() {
       setUploadPhase('uploading');
       setUploadProgress(0);
 
-      try {
-        for (let i = 0; i < files.length; i++) {
-          setUploadFileIndex(i);
-          setUploadPhase('uploading');
+      const failedFiles: { name: string; reason: string }[] = [];
+      let successCount = 0;
 
+      for (let i = 0; i < files.length; i++) {
+        setUploadFileIndex(i);
+        setUploadPhase('uploading');
+
+        // Skip files over 4.5 MB (Vercel serverless payload limit)
+        if (files[i].size > 4.5 * 1024 * 1024) {
+          failedFiles.push({
+            name: files[i].name,
+            reason: `Too large (${(files[i].size / (1024 * 1024)).toFixed(1)} MB — max 4.5 MB)`,
+          });
+          continue;
+        }
+
+        try {
           const result = await uploadSingleFile(deal.id, files[i], (pct) => {
             const fileWeight = 100 / files.length;
             const overallPct = Math.round((i * fileWeight) + (pct * fileWeight / 100));
@@ -118,13 +130,23 @@ export default function DealView() {
             category: doc.category,
           }));
           addDocumentsToCache(deal.id, docsForCache);
+          successCount++;
+        } catch (err: any) {
+          const reason = err.message?.includes('Too Large') || err.message?.includes('PAYLOAD')
+            ? `Too large for upload (${(files[i].size / (1024 * 1024)).toFixed(1)} MB)`
+            : err.message || 'Upload failed';
+          failedFiles.push({ name: files[i].name, reason });
         }
+      }
 
-        setUploadProgress(100);
-      } catch (err: any) {
-        setUploadError(err.message);
-      } finally {
-        setUploadPhase('idle');
+      setUploadProgress(100);
+      setUploadPhase('idle');
+
+      if (failedFiles.length > 0) {
+        const summary = failedFiles.map((f) => `${f.name}: ${f.reason}`).join('\n');
+        setUploadError(
+          `${successCount} file${successCount !== 1 ? 's' : ''} uploaded. ${failedFiles.length} skipped:\n${summary}`
+        );
       }
     },
     [deal, addDocumentsToCache]
@@ -285,7 +307,7 @@ export default function DealView() {
           {uploadError && (
             <div className="mb-3 p-3 bg-[#e5484d]/8 border border-[#e5484d]/15 rounded-lg flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-[#e5484d] shrink-0 mt-0.5" />
-              <p className="text-sm text-[#e5484d]">{uploadError}</p>
+              <pre className="text-sm text-[#e5484d] whitespace-pre-wrap font-sans">{uploadError}</pre>
             </div>
           )}
 
