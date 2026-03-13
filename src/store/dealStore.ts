@@ -36,6 +36,7 @@ interface DealStore {
 
   // Local cache operations (upload.js / analyze.js already persist in Redis)
   addDocumentsToCache: (dealId: string, docs: Document[]) => void;
+  updateDocumentStatus: (dealId: string, docId: string, status: Document['status']) => void;
   removeDocument: (dealId: string, docId: string) => void;
   setAnalysis: (dealId: string, analysis: DealAnalysis) => void;
   setSummaryEdits: (dealId: string, edits: Partial<CompanySummary>) => void;
@@ -157,6 +158,20 @@ export const useDealStore = create<DealStore>()(
           deals: s.deals.map((d) =>
             d.id === dealId
               ? { ...d, documents: [...d.documents, ...docs], updatedAt: new Date().toISOString() }
+              : d
+          ),
+        })),
+
+      updateDocumentStatus: (dealId, docId, status) =>
+        set((s) => ({
+          deals: s.deals.map((d) =>
+            d.id === dealId
+              ? {
+                  ...d,
+                  documents: d.documents.map((doc) =>
+                    doc.id === docId ? { ...doc, status } : doc
+                  ),
+                }
               : d
           ),
         })),

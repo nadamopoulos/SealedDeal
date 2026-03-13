@@ -48,6 +48,7 @@ export default function DealView() {
     getDeal,
     setActiveDeal,
     addDocumentsToCache,
+    updateDocumentStatus,
     updateDeal,
     setAnalysis,
     setDealStage,
@@ -144,15 +145,35 @@ export default function DealView() {
       // ── Phase 2: Extract text from blob files (background) ──
       if (pendingBlobs.length > 0) {
         setUploadPhase('processing');
-        // Fire-and-forget: extract each blob file, don't block the UI
-        for (const blobInfo of pendingBlobs) {
-          processUploadedBlob(deal.id, blobInfo).catch((err) => {
-            console.warn(`Background extraction failed for ${blobInfo.fileName}:`, err.message);
-          });
-        }
-      }
 
-      setUploadPhase('idle');
+        // Process each blob and update UI as each completes
+        const processingPromises = pendingBlobs.map(async (blobInfo) => {
+          try {
+            const result = await processUploadedBlob(deal.id, blobInfo);
+            // Update doc status in the local store
+            const processedDoc = result.documents?.[0];
+            if (processedDoc?.id) {
+              updateDocumentStatus(deal.id, processedDoc.id, processedDoc.status === 'error' ? 'error' : 'extracted');
+            }
+          } catch (err: any) {
+            console.warn(`Extraction failed for ${blobInfo.fileName}:`, err.message);
+            // Find the doc by name and mark as error
+            const currentDeal = getDeal(deal.id);
+            const doc = currentDeal?.documents.find((d) => d.name === blobInfo.fileName && d.status === 'processing');
+            if (doc) {
+              updateDocumentStatus(deal.id, doc.id, 'error');
+            }
+          }
+        });
+
+        // Wait for all processing to complete, then refresh from server
+        Promise.allSettled(processingPromises).then(() => {
+          setUploadPhase('idle');
+          loadDeal(deal.id); // Sync with server state
+        });
+      } else {
+        setUploadPhase('idle');
+      }
 
       if (failedFiles.length > 0) {
         const summary = failedFiles.map((f) => `${f.name}: ${f.reason}`).join('\n');
@@ -161,7 +182,7 @@ export default function DealView() {
         );
       }
     },
-    [deal, addDocumentsToCache]
+    [deal, addDocumentsToCache, updateDocumentStatus, getDeal, loadDeal]
   );
 
   const handleAnalyze = useCallback(async () => {

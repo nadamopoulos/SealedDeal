@@ -38,10 +38,19 @@ const EXT_TO_MIME = {
  * Extract text from any file by sending it to Claude as a document.
  * Claude handles PDFs, XLSX, DOCX, and other document formats natively.
  */
+/** Max file size to send to Claude (25 MB — base64 expands ~33%, nearing API limits) */
+const MAX_CLAUDE_FILE_SIZE = 25 * 1024 * 1024;
+
 async function extractWithClaude(buffer, filename) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return `[Cannot extract text from ${filename}: ANTHROPIC_API_KEY not configured]`;
+  }
+
+  if (buffer.length > MAX_CLAUDE_FILE_SIZE) {
+    const sizeMB = (buffer.length / (1024 * 1024)).toFixed(1);
+    console.warn(`Skipping Claude extraction for "${filename}" (${sizeMB} MB exceeds 25 MB limit)`);
+    return `[File "${filename}" is ${sizeMB} MB — too large for text extraction. Max supported: 25 MB.]`;
   }
 
   const ext = path.extname(filename || '').toLowerCase();
