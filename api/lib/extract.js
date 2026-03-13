@@ -1,5 +1,6 @@
 import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
+import XLSX from 'xlsx';
 
 /**
  * Categorize a document based on its filename.
@@ -23,7 +24,6 @@ export function categorizeDocument(filename) {
 
 function extractXlsx(buffer, filename) {
   try {
-    const XLSX = require('xlsx');
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const parts = [];
 
