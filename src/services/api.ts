@@ -128,53 +128,100 @@ export function uploadSmallFile(
   });
 }
 
+/** Chunk size for large file uploads (4 MB — stays under Vercel's 4.5 MB body limit) */
+const CHUNK_SIZE = 4 * 1024 * 1024;
+
 /**
- * Upload a large file (> 4 MB) to Vercel Blob using the SDK's upload().
- * The SDK handles the browser→Blob CDN upload directly via client tokens.
+ * Upload a large file (> 4 MB) via server-side chunking.
+ * 1. Split file into 4 MB slices
+ * 2. Send each chunk via XHR FormData → upload-chunk.js → temp blob
+ * 3. Send all temp URLs to finalize-upload.js → final blob + Redis registration
  *
- * Key requirements for Vite:
- * - vite.config aliases 'undici' and 'crypto' to @vercel/blob browser shims
- * - access: 'private' because the Blob store is configured as private
+ * Progress: 0-80% for chunk uploads, 80-100% for finalize.
  */
-export async function uploadLargeFileToBlobAndRegister(
+export async function uploadLargeFileChunked(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  if (onProgress) onProgress(5);
+  const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const tempUrls: string[] = new Array(totalChunks);
 
-  const { upload } = await import('@vercel/blob/client');
+  console.log(`[chunked] ${file.name}: ${totalChunks} chunks, uploadId=${uploadId}`);
 
-  let blob;
-  try {
-    blob = await upload(file.name, file, {
-      access: 'private',
-      handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
-      clientPayload: JSON.stringify({ dealId }),
-    });
-  } catch (uploadErr: any) {
-    const msg = uploadErr?.message || 'Unknown error';
-    throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
+  // Phase 1: Upload all chunks sequentially (80% of progress)
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunkBlob = file.slice(start, end);
+
+    const result = await uploadChunk(dealId, chunkBlob, i, uploadId);
+    tempUrls[i] = result.tempUrl;
+
+    if (onProgress) {
+      const chunkPct = Math.round(((i + 1) / totalChunks) * 80);
+      onProgress(chunkPct);
+    }
   }
 
+  // Phase 2: Finalize — assemble chunks into final blob (80% → 100%)
   if (onProgress) onProgress(85);
 
-  // Step 4: Register in Redis immediately (no extraction) — fast
-  const registerRes = await fetch(`${API_BASE}/deals/${dealId}/register-blob`, {
+  const finalizeRes = await fetch(`${API_BASE}/deals/${dealId}/finalize-upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      blobUrl: blob.url,
+      tempUrls,
       fileName: file.name,
       fileSize: file.size,
+      contentType: file.type || 'application/octet-stream',
+      uploadId,
     }),
   });
 
-  const data = await parseJsonResponse(registerRes);
-  if (!registerRes.ok) throw new Error(data.error || 'Failed to register upload');
+  const data = await parseJsonResponse(finalizeRes);
+  if (!finalizeRes.ok) throw new Error(data.error || 'Finalize upload failed');
 
   if (onProgress) onProgress(100);
   return data;
+}
+
+/**
+ * Send a single chunk to upload-chunk.js via XHR (supports upload progress).
+ */
+function uploadChunk(
+  dealId: string,
+  chunkBlob: Blob,
+  chunkIndex: number,
+  uploadId: string
+): Promise<{ tempUrl: string; chunkIndex: number }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('chunk', chunkBlob, 'chunk');
+    formData.append('chunkIndex', String(chunkIndex));
+    formData.append('uploadId', uploadId);
+
+    xhr.addEventListener('load', () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(data.error || `Chunk ${chunkIndex} failed (${xhr.status})`));
+        }
+      } catch {
+        reject(new Error(xhr.responseText?.slice(0, 200) || `Chunk error (${xhr.status})`));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error(`Network error uploading chunk ${chunkIndex}`)));
+    xhr.addEventListener('abort', () => reject(new Error('Chunk upload cancelled')));
+
+    xhr.open('POST', `${API_BASE}/deals/${dealId}/upload-chunk`);
+    xhr.send(formData);
+  });
 }
 
 /**
@@ -207,8 +254,8 @@ export function uploadFile(
 ): Promise<UploadResult> {
   const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
   if (file.size > DIRECT_UPLOAD_LIMIT) {
-    console.log(`[upload] ${file.name} (${sizeMB} MB) → blob multipart`);
-    return uploadLargeFileToBlobAndRegister(dealId, file, onProgress);
+    console.log(`[upload] ${file.name} (${sizeMB} MB) → chunked upload`);
+    return uploadLargeFileChunked(dealId, file, onProgress);
   }
   console.log(`[upload] ${file.name} (${sizeMB} MB) → direct XHR`);
   return uploadSmallFile(dealId, file, onProgress);

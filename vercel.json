@@ -19,9 +19,13 @@
       "maxDuration": 60,
       "memory": 1024
     },
-    "api/deals/[dealId]/blob-upload.js": {
+    "api/deals/[dealId]/upload-chunk.js": {
       "maxDuration": 30,
       "memory": 256
+    },
+    "api/deals/[dealId]/finalize-upload.js": {
+      "maxDuration": 60,
+      "memory": 1024
     },
     "api/deals/[dealId]/process-blob.js": {
       "maxDuration": 120,
