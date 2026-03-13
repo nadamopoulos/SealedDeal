@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     const client = new Anthropic({ apiKey });
 
     const allText = documents
-      .filter((d) => d.extractedText && !d.extractedText.startsWith('[Error'))
+      .filter((d) => d.extractedText && !/^\[(Error|Cannot|File ")/.test(d.extractedText))
       .map((d) => `\n--- DOCUMENT: ${d.name} ---\n${d.extractedText}`)
       .join('\n\n');
 

@@ -134,7 +134,7 @@ export async function processFile(buffer, filename, dealId, redis) {
     type: ext.replace('.', ''),
     size: buffer.byteLength || buffer.length,
     uploadedAt: new Date().toISOString(),
-    status: extractedText.startsWith('[Error') ? 'error' : 'extracted',
+    status: /^\[(Error|Cannot|File ")/.test(extractedText) ? 'error' : 'extracted',
     category: categorizeDocument(filename || ''),
   };
 
