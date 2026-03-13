@@ -19,29 +19,74 @@ export function categorizeDocument(filename) {
   return 'other';
 }
 
-// ─── MIME type mapping ──────────────────────────────────────
+// ─── XLSX extraction via SheetJS ────────────────────────────
 
-const EXT_TO_MIME = {
-  '.pdf': 'application/pdf',
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.xls': 'application/vnd.ms-excel',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.doc': 'application/msword',
-  '.csv': 'text/csv',
-  '.txt': 'text/plain',
-  '.md': 'text/plain',
-};
+function extractXlsx(buffer, filename) {
+  try {
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const parts = [];
 
-// ─── Claude-based extraction ────────────────────────────────
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) continue;
 
-/**
- * Extract text from any file by sending it to Claude as a document.
- * Claude handles PDFs, XLSX, DOCX, and other document formats natively.
- */
-/** Max file size to send to Claude (25 MB — base64 expands ~33%, nearing API limits) */
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      if (!rows.length) continue;
+
+      parts.push(`\n=== Sheet: ${sheetName} ===`);
+
+      for (let i = 0; i < Math.min(rows.length, 5000); i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        const cells = row.map((cell) => {
+          if (cell instanceof Date) return cell.toISOString().split('T')[0];
+          if (cell === null || cell === undefined) return '';
+          return String(cell);
+        });
+        if (cells.every((c) => c.trim() === '')) continue;
+        parts.push(cells.join('\t'));
+      }
+
+      if (rows.length > 5000) {
+        parts.push(`... (${rows.length - 5000} more rows truncated)`);
+      }
+    }
+
+    const text = parts.join('\n');
+    if (text.trim().length < 20) {
+      return `[Error: Spreadsheet "${filename}" appears empty or contains only formatting]`;
+    }
+    return text;
+  } catch (err) {
+    console.error(`XLSX extraction failed for ${filename}:`, err);
+    return `[Error extracting spreadsheet ${filename}: ${err.message}]`;
+  }
+}
+
+// ─── DOCX extraction via mammoth ────────────────────────────
+
+async function extractDocx(buffer, filename) {
+  try {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
+    const text = (result.value || '').trim();
+    if (text.length < 10) {
+      return `[Error: Document "${filename}" appears empty]`;
+    }
+    return text;
+  } catch (err) {
+    console.error(`DOCX extraction failed for ${filename}:`, err);
+    return `[Error extracting document ${filename}: ${err.message}]`;
+  }
+}
+
+// ─── Claude PDF extraction ──────────────────────────────────
+
+/** Max file size to send to Claude (25 MB — base64 expands ~33%) */
 const MAX_CLAUDE_FILE_SIZE = 25 * 1024 * 1024;
 
-async function extractWithClaude(buffer, filename) {
+async function extractPdfWithClaude(buffer, filename) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return `[Cannot extract text from ${filename}: ANTHROPIC_API_KEY not configured]`;
@@ -49,12 +94,8 @@ async function extractWithClaude(buffer, filename) {
 
   if (buffer.length > MAX_CLAUDE_FILE_SIZE) {
     const sizeMB = (buffer.length / (1024 * 1024)).toFixed(1);
-    console.warn(`Skipping Claude extraction for "${filename}" (${sizeMB} MB exceeds 25 MB limit)`);
-    return `[File "${filename}" is ${sizeMB} MB — too large for text extraction. Max supported: 25 MB.]`;
+    return `[File "${filename}" is ${sizeMB} MB — too large for text extraction. Max: 25 MB.]`;
   }
-
-  const ext = path.extname(filename || '').toLowerCase();
-  const mediaType = EXT_TO_MIME[ext] || 'application/octet-stream';
 
   try {
     const client = new Anthropic({ apiKey });
@@ -71,15 +112,15 @@ async function extractWithClaude(buffer, filename) {
               type: 'document',
               source: {
                 type: 'base64',
-                media_type: mediaType,
+                media_type: 'application/pdf',
                 data: base64,
               },
             },
             {
               type: 'text',
-              text: `Extract ALL text content from this document "${filename}". Include every piece of text — headings, body text, tables, captions, footnotes, headers, footers, page numbers, chart labels, and any text in images or diagrams.
+              text: `Extract ALL text content from this PDF "${filename}". Include every piece of text — headings, body text, tables, captions, footnotes, headers, footers, page numbers, chart labels, and any text in images or diagrams.
 
-For tables and spreadsheets, format them as tab-separated values with clear column headers. Include ALL sheets if this is a spreadsheet.
+For tables, format them as tab-separated values with clear column headers.
 For financial data, preserve all numbers, percentages, and currency values exactly as shown.
 For charts/graphs, describe the data shown including axis labels and values.
 
@@ -91,10 +132,10 @@ Output ONLY the extracted text, no commentary or explanation. Preserve the docum
     });
 
     const text = response.content[0]?.text || '';
-    console.log(`Claude extraction for "${filename}": ${text.length} chars`);
+    console.log(`Claude PDF extraction for "${filename}": ${text.length} chars`);
     return text;
   } catch (err) {
-    console.error(`Claude extraction failed for ${filename}:`, err.message);
+    console.error(`Claude PDF extraction failed for ${filename}:`, err.message);
     return `[Error extracting ${filename} with Claude: ${err.message}]`;
   }
 }
@@ -103,19 +144,35 @@ Output ONLY the extracted text, no commentary or explanation. Preserve the docum
 
 /**
  * Extract text from a file buffer.
- * - Plain text files (TXT, CSV, MD): direct read (no API call needed)
- * - Everything else (PDF, XLSX, XLS, DOCX, etc.): sent to Claude
+ * - TXT/CSV/MD: direct read
+ * - XLSX/XLS: SheetJS library (local, fast, reliable)
+ * - DOCX: mammoth library (local)
+ * - PDF: Claude document API (handles scanned/image PDFs)
  */
 export async function extractText(buffer, filename) {
   const ext = path.extname(filename || '').toLowerCase();
 
-  // Plain text files — no need for an API call
+  // Plain text — direct read
   if (ext === '.txt' || ext === '.csv' || ext === '.md') {
     return Buffer.from(buffer).toString('utf-8');
   }
 
-  // All other files — send to Claude for extraction
-  return extractWithClaude(buffer, filename);
+  // Spreadsheets — SheetJS (Claude API doesn't support XLSX)
+  if (ext === '.xlsx' || ext === '.xls') {
+    return extractXlsx(buffer, filename);
+  }
+
+  // Word docs — mammoth
+  if (ext === '.docx') {
+    return extractDocx(buffer, filename);
+  }
+
+  // PDFs — Claude document API
+  if (ext === '.pdf') {
+    return extractPdfWithClaude(buffer, filename);
+  }
+
+  return `[Error: Unsupported file type: ${ext}]`;
 }
 
 /**
