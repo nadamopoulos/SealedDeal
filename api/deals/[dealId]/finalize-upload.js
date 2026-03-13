@@ -1,11 +1,10 @@
-import { put, del } from '@vercel/blob';
+import { del } from '@vercel/blob';
 import { redis } from '../../lib/redis.js';
-import { registerFile, appendDocsToDeal } from '../../lib/extract.js';
+import { processFile, appendDocsToDeal } from '../../lib/extract.js';
 
 /**
  * Assembles chunked upload: downloads temp blobs, concatenates them,
- * stores the final file as a single blob, cleans up temps, and registers
- * the document in Redis.
+ * extracts text via Claude, stores in Redis, and cleans up temps.
  *
  * Body JSON:
  *   tempUrls   — ordered array of temporary blob URLs
@@ -52,36 +51,33 @@ export default async function handler(req, res) {
     const finalBuffer = Buffer.concat(chunkBuffers);
     console.log(`finalize-upload: assembled ${finalBuffer.length} bytes`);
 
-    // 3. Store final blob
-    const pathname = `deals/${dealId}/${Date.now()}-${fileName}`;
-    const finalBlob = await put(pathname, finalBuffer, {
-      token,
-      access: 'private',
-      contentType: contentType || 'application/octet-stream',
-      addRandomSuffix: false,
-    });
-
-    console.log(`finalize-upload: stored final blob → ${finalBlob.url}`);
-
-    // 4. Delete temp blobs (fire-and-forget, don't block response)
+    // 3. Delete temp blobs (fire-and-forget, don't block extraction)
     del(tempUrls, { token }).catch((err) =>
       console.error('finalize-upload: temp cleanup error:', err)
     );
 
-    // 5. Register document in Redis
-    const { docMeta } = registerFile(fileName, fileSize);
+    // 4. Extract text directly — we already have the buffer, no need to save+re-download
+    const { docMeta, truncatedText } = await processFile(
+      finalBuffer,
+      fileName,
+      dealId,
+      redis
+    );
 
-    if (redis) {
-      await redis.set(`deal:${dealId}:blob:${docMeta.id}`, finalBlob.url);
+    // Override size with the original file size
+    if (fileSize) {
+      docMeta.size = fileSize;
     }
 
+    // 5. Update deal in Redis
     await appendDocsToDeal(dealId, [docMeta], redis);
+
+    console.log(`finalize-upload: "${fileName}" extracted ${truncatedText.length} chars, status=${docMeta.status}`);
 
     res.json({
       documents: [{
         ...docMeta,
-        extractedText: '',
-        blobUrl: finalBlob.url,
+        extractedText: truncatedText,
       }],
     });
   } catch (err) {

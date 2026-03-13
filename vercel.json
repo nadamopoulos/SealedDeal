@@ -24,7 +24,7 @@
       "memory": 256
     },
     "api/deals/[dealId]/finalize-upload.js": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "memory": 1024
     },
     "api/deals/[dealId]/process-blob.js": {

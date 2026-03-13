@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDealStore } from '../store/dealStore';
-import { uploadFile, processUploadedBlob, analyzeDeal } from '../services/api';
+import { uploadFile, analyzeDeal } from '../services/api';
 import type { AnalysisTab, DealStage } from '../types';
 import { DEAL_STAGES } from '../types';
 import DocumentUpload from '../components/DocumentUpload';
@@ -48,7 +48,6 @@ export default function DealView() {
     getDeal,
     setActiveDeal,
     addDocumentsToCache,
-    updateDocumentStatus,
     updateDeal,
     setAnalysis,
     setDealStage,
@@ -95,10 +94,11 @@ export default function DealView() {
       setUploadProgress(0);
 
       const failedFiles: { name: string; reason: string }[] = [];
-      const pendingBlobs: { blobUrl: string; fileName: string; fileSize: number }[] = [];
       let successCount = 0;
 
-      // ── Phase 1: Upload ALL files fast ──────────────────────
+      // Upload + extract each file sequentially
+      // Small files: upload.js extracts inline
+      // Large files: chunked upload → finalize-upload.js extracts directly (no separate process step)
       for (let i = 0; i < files.length; i++) {
         setUploadFileIndex(i);
         setUploadPhase('uploading');
@@ -110,7 +110,7 @@ export default function DealView() {
             setUploadProgress(overallPct);
           });
 
-          // Add to document list immediately
+          // Add to document list — extraction is already done
           const docsForCache = result.documents.map((doc: any) => ({
             id: doc.id,
             name: doc.name,
@@ -118,20 +118,11 @@ export default function DealView() {
             size: doc.size || 0,
             uploadedAt: new Date().toISOString(),
             extractedText: null,
-            status: (doc.status === 'pending' ? 'processing' : doc.status) as 'extracted' | 'error' | 'processing',
+            status: (doc.status || 'extracted') as 'extracted' | 'error' | 'processing',
             category: doc.category,
           }));
           addDocumentsToCache(deal.id, docsForCache);
           successCount++;
-
-          // Track blob files that need extraction later
-          if (result.documents[0]?.blobUrl) {
-            pendingBlobs.push({
-              blobUrl: result.documents[0].blobUrl,
-              fileName: files[i].name,
-              fileSize: files[i].size,
-            });
-          }
         } catch (err: any) {
           const reason = err.message?.includes('Too Large') || err.message?.includes('PAYLOAD')
             ? `Too large for upload (${(files[i].size / (1024 * 1024)).toFixed(1)} MB)`
@@ -141,39 +132,7 @@ export default function DealView() {
       }
 
       setUploadProgress(100);
-
-      // ── Phase 2: Extract text from blob files (background) ──
-      if (pendingBlobs.length > 0) {
-        setUploadPhase('processing');
-
-        // Process each blob and update UI as each completes
-        const processingPromises = pendingBlobs.map(async (blobInfo) => {
-          try {
-            const result = await processUploadedBlob(deal.id, blobInfo);
-            // Update doc status in the local store
-            const processedDoc = result.documents?.[0];
-            if (processedDoc?.id) {
-              updateDocumentStatus(deal.id, processedDoc.id, processedDoc.status === 'error' ? 'error' : 'extracted');
-            }
-          } catch (err: any) {
-            console.warn(`Extraction failed for ${blobInfo.fileName}:`, err.message);
-            // Find the doc by name and mark as error
-            const currentDeal = getDeal(deal.id);
-            const doc = currentDeal?.documents.find((d) => d.name === blobInfo.fileName && d.status === 'processing');
-            if (doc) {
-              updateDocumentStatus(deal.id, doc.id, 'error');
-            }
-          }
-        });
-
-        // Wait for all processing to complete, then refresh from server
-        Promise.allSettled(processingPromises).then(() => {
-          setUploadPhase('idle');
-          loadDeal(deal.id); // Sync with server state
-        });
-      } else {
-        setUploadPhase('idle');
-      }
+      setUploadPhase('idle');
 
       if (failedFiles.length > 0) {
         const summary = failedFiles.map((f) => `${f.name}: ${f.reason}`).join('\n');
@@ -182,7 +141,7 @@ export default function DealView() {
         );
       }
     },
-    [deal, addDocumentsToCache, updateDocumentStatus, getDeal, loadDeal]
+    [deal, addDocumentsToCache]
   );
 
   const handleAnalyze = useCallback(async () => {

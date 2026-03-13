@@ -165,7 +165,8 @@ export async function uploadLargeFileChunked(
     }
   }
 
-  // Phase 2: Finalize — assemble chunks into final blob (80% → 100%)
+  // Phase 2: Finalize — assemble chunks + extract text (80% → 100%)
+  // This now does extraction directly (no separate process-blob step)
   if (onProgress) onProgress(85);
 
   const finalizeRes = await fetch(`${API_BASE}/deals/${dealId}/finalize-upload`, {
