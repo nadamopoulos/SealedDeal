@@ -34,10 +34,12 @@ export default async function handler(req, res) {
   try {
     console.log(`finalize-upload: assembling ${tempUrls.length} chunks for "${fileName}" (${fileSize} bytes)`);
 
-    // 1. Download all temp blobs in parallel
+    // 1. Download all temp blobs in parallel (private blobs need auth)
     const chunkBuffers = await Promise.all(
       tempUrls.map(async (url, i) => {
-        const resp = await fetch(url);
+        const resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!resp.ok) {
           throw new Error(`Failed to download chunk ${i}: ${resp.status} ${resp.statusText}`);
         }

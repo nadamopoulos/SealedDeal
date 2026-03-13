@@ -15,8 +15,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Download file from Vercel Blob
-    const blobResponse = await fetch(blobUrl);
+    // Download file from Vercel Blob (private blobs need auth)
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    const fetchOpts = blobToken
+      ? { headers: { Authorization: `Bearer ${blobToken}` } }
+      : {};
+    const blobResponse = await fetch(blobUrl, fetchOpts);
     if (!blobResponse.ok) {
       throw new Error(`Failed to download blob: ${blobResponse.status}`);
     }
