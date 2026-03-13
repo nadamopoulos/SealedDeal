@@ -129,71 +129,106 @@ export function uploadSmallFile(
 }
 
 /**
- * Upload a large file (> 4 MB) to Vercel Blob and register it immediately
- * WITHOUT extraction. Returns doc metadata with blobUrl.
+ * Upload a large file (> 4 MB) to Vercel Blob via server-side chunked
+ * multipart upload. Each chunk is sent to our server (< 4 MB each),
+ * and the server uploads it to Blob — no CORS issues at all.
  *
- * Zero SDK dependency — uses native browser fetch only.
- * 1. Get client token from our server
- * 2. PUT file to Vercel Blob API via native fetch (follows redirects)
- * 3. Register blob URL in our backend
+ * 1. Server creates multipart upload
+ * 2. Client sends base64 chunks to server → server uploads parts
+ * 3. Server completes multipart upload → returns blob URL
+ * 4. Register blob URL in Redis
  */
+const CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB binary → ~3.4 MB base64
+
 export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  // Step 1: Get a client token from our server
+  const mpUrl = `${API_BASE}/deals/${dealId}/blob-multipart`;
+
+  // Step 1: Create multipart upload on server
   if (onProgress) onProgress(5);
 
-  const tokenRes = await fetch(`${API_BASE}/deals/${dealId}/blob-upload`, {
+  const createRes = await fetch(mpUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      type: 'blob.generate-client-token',
-      payload: { pathname: file.name, multipart: false },
+      action: 'create',
+      pathname: file.name,
+      contentType: file.type || 'application/octet-stream',
     }),
   });
+  if (!createRes.ok) {
+    const err = await createRes.text();
+    throw new Error(`Multipart create failed for ${file.name}: ${err.slice(0, 200)}`);
+  }
+  const { uploadId, key } = await createRes.json();
 
-  if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    throw new Error(`Token request failed for ${file.name}: ${err.slice(0, 200)}`);
+  // Step 2: Upload file in chunks
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const parts: { partNumber: number; etag: string }[] = [];
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+
+    // Convert chunk to base64 for JSON transport
+    const arrayBuf = await chunk.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuf).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    const partRes = await fetch(mpUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'upload-part',
+        uploadId,
+        key,
+        pathname: file.name,
+        partNumber: i + 1,
+        chunkBase64: base64,
+      }),
+    });
+
+    if (!partRes.ok) {
+      const err = await partRes.text();
+      throw new Error(`Chunk ${i + 1}/${totalChunks} failed for ${file.name}: ${err.slice(0, 200)}`);
+    }
+
+    const part = await partRes.json();
+    parts.push({ partNumber: part.partNumber, etag: part.etag });
+
+    // Progress: 10% - 80% for chunked upload
+    if (onProgress) {
+      const pct = 10 + Math.round(((i + 1) / totalChunks) * 70);
+      onProgress(pct);
+    }
   }
 
-  const { clientToken, apiUrl } = await tokenRes.json();
-  if (!clientToken) {
-    throw new Error(`No client token returned for ${file.name}`);
-  }
-
-  if (onProgress) onProgress(10);
-
-  // Step 2: PUT file directly to Vercel Blob API using native fetch
-  // Server provides the correct Blob API URL (Vercel auto-sets VERCEL_BLOB_API_URL)
-  const blobApiBase = apiUrl || 'https://vercel.com/api/blob';
-  const params = new URLSearchParams({ pathname: file.name });
-  const blobRes = await fetch(`${blobApiBase}/?${params.toString()}`, {
-    method: 'PUT',
-    headers: {
-      'authorization': `Bearer ${clientToken}`,
-      'x-api-version': '12',
-      'x-vercel-blob-access': 'public',
-      'x-content-type': file.type || 'application/octet-stream',
-    },
-    body: file,
+  // Step 3: Complete multipart upload
+  const completeRes = await fetch(mpUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'complete',
+      uploadId,
+      key,
+      pathname: file.name,
+      parts,
+    }),
   });
-
-  if (!blobRes.ok) {
-    const errText = await blobRes.text().catch(() => '');
-    throw new Error(`Blob upload failed (${blobRes.status}) for ${file.name}: ${errText.slice(0, 200)}`);
+  if (!completeRes.ok) {
+    const err = await completeRes.text();
+    throw new Error(`Multipart complete failed for ${file.name}: ${err.slice(0, 200)}`);
   }
-
-  const blobData = await blobRes.json();
-  if (!blobData.url) {
-    throw new Error(`Blob upload returned no URL for ${file.name}`);
-  }
+  const blobData = await completeRes.json();
 
   if (onProgress) onProgress(85);
 
-  // Step 3: Register in Redis immediately (no extraction) — fast
+  // Step 4: Register in Redis immediately (no extraction) — fast
   const registerRes = await fetch(`${API_BASE}/deals/${dealId}/register-blob`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -239,9 +274,12 @@ export function uploadFile(
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
   if (file.size > DIRECT_UPLOAD_LIMIT) {
+    console.log(`[upload] ${file.name} (${sizeMB} MB) → blob multipart`);
     return uploadLargeFileToBlobAndRegister(dealId, file, onProgress);
   }
+  console.log(`[upload] ${file.name} (${sizeMB} MB) → direct XHR`);
   return uploadSmallFile(dealId, file, onProgress);
 }
 
