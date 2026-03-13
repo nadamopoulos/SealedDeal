@@ -4,6 +4,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import XLSX from 'xlsx';
 
 const require = createRequire(import.meta.url);
+// Import pdf-parse core directly — the main index.js has a bug where
+// it tries to read a test file when module.parent is falsy (bundled envs)
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 
 /**
  * Categorize a document based on its filename.
@@ -88,7 +91,6 @@ async function extractDocx(buffer, filename) {
 
 async function extractPdf(buffer, filename) {
   try {
-    const pdfParse = require('pdf-parse');
     const data = await pdfParse(Buffer.from(buffer));
 
     const text = (data.text || '').trim();
