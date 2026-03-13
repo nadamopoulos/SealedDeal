@@ -16,7 +16,7 @@
       "memory": 1024
     },
     "api/deals/[dealId]/upload.js": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "memory": 1024
     },
     "api/deals/[dealId]/upload-chunk.js": {
