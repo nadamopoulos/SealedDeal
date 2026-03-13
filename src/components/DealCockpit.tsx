@@ -216,7 +216,7 @@ export default function DealCockpit({ analysis, deal }: Props) {
       {/* ===== Top Row: Score + Business Summary + Risk ===== */}
       <div className="grid grid-cols-12 gap-4">
         {/* Overall Score */}
-        <div className="col-span-12 md:col-span-3 bg-white border border-[#eaeaea] rounded-2xl p-6 flex flex-col items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+        <div className="col-span-12 md:col-span-3 bg-white border border-[#eaeaea] rounded-2xl p-6 flex flex-col items-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
           <p className="text-xs font-semibold text-[#888888] uppercase tracking-wider mb-4">
             Deal Score
           </p>
