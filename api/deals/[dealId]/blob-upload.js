@@ -39,8 +39,12 @@ export default async function handler(req, res) {
         multipart: multipart || false,
       });
 
-      console.log('blob-upload: generated token for', pathname, '(multipart:', multipart, ')');
-      return res.json({ type, clientToken });
+      // Return the Blob API URL so the client can upload directly.
+      // Vercel auto-sets VERCEL_BLOB_API_URL; fallback to public default.
+      const apiUrl = process.env.VERCEL_BLOB_API_URL || 'https://vercel.com/api/blob';
+
+      console.log('blob-upload: generated token for', pathname, 'apiUrl:', apiUrl);
+      return res.json({ type, clientToken, apiUrl });
     }
 
     if (type === 'blob.upload-completed') {

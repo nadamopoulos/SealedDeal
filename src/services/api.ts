@@ -159,7 +159,7 @@ export async function uploadLargeFileToBlobAndRegister(
     throw new Error(`Token request failed for ${file.name}: ${err.slice(0, 200)}`);
   }
 
-  const { clientToken } = await tokenRes.json();
+  const { clientToken, apiUrl } = await tokenRes.json();
   if (!clientToken) {
     throw new Error(`No client token returned for ${file.name}`);
   }
@@ -167,9 +167,10 @@ export async function uploadLargeFileToBlobAndRegister(
   if (onProgress) onProgress(10);
 
   // Step 2: PUT file directly to Vercel Blob API using native fetch
-  // Native fetch follows redirects automatically (unlike XHR)
+  // Server provides the correct Blob API URL (Vercel auto-sets VERCEL_BLOB_API_URL)
+  const blobApiBase = apiUrl || 'https://vercel.com/api/blob';
   const params = new URLSearchParams({ pathname: file.name });
-  const blobRes = await fetch(`https://vercel.com/api/blob/?${params.toString()}`, {
+  const blobRes = await fetch(`${blobApiBase}/?${params.toString()}`, {
     method: 'PUT',
     headers: {
       'authorization': `Bearer ${clientToken}`,
