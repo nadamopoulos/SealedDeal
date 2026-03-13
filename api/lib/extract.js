@@ -1,6 +1,9 @@
 import path from 'path';
+import { createRequire } from 'module';
 import Anthropic from '@anthropic-ai/sdk';
 import XLSX from 'xlsx';
+
+const require = createRequire(import.meta.url);
 
 /**
  * Categorize a document based on its filename.
@@ -81,18 +84,17 @@ async function extractDocx(buffer, filename) {
   }
 }
 
-// ─── PDF extraction via unpdf (fast, local, ESM-native) ─────
+// ─── PDF extraction via pdf-parse (fast, local, self-contained) ─────
 
 async function extractPdf(buffer, filename) {
   try {
-    const { extractText: pdfExtract } = await import('unpdf');
-    const uint8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-    const { text: pages, totalPages } = await pdfExtract(uint8);
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(Buffer.from(buffer));
 
-    // pages is an array of strings, one per page
-    const text = (Array.isArray(pages) ? pages.join('\n\n') : String(pages)).trim();
+    const text = (data.text || '').trim();
+    const pageCount = data.numpages || 0;
 
-    console.log(`unpdf for "${filename}": ${text.length} chars, ${totalPages} pages`);
+    console.log(`pdf-parse for "${filename}": ${text.length} chars, ${pageCount} pages`);
 
     if (text.length < 50) {
       // Very little text — might be a scanned/image-heavy PDF
@@ -102,7 +104,7 @@ async function extractPdf(buffer, filename) {
 
     return text;
   } catch (err) {
-    console.error(`unpdf failed for ${filename}:`, err.message);
+    console.error(`pdf-parse failed for ${filename}:`, err.message);
     // Fall back to Claude API
     console.log(`Falling back to Claude API for "${filename}"...`);
     return extractPdfWithClaude(buffer, filename);
