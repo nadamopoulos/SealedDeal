@@ -81,9 +81,35 @@ async function extractDocx(buffer, filename) {
   }
 }
 
-// ─── Claude PDF extraction ──────────────────────────────────
+// ─── PDF extraction via unpdf (fast, local, ESM-native) ─────
 
-/** Max file size to send to Claude (25 MB — base64 expands ~33%) */
+async function extractPdf(buffer, filename) {
+  try {
+    const { extractText: pdfExtract } = await import('unpdf');
+    const uint8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    const { text: pages, totalPages } = await pdfExtract(uint8);
+
+    // pages is an array of strings, one per page
+    const text = (Array.isArray(pages) ? pages.join('\n\n') : String(pages)).trim();
+
+    console.log(`unpdf for "${filename}": ${text.length} chars, ${totalPages} pages`);
+
+    if (text.length < 50) {
+      // Very little text — might be a scanned/image-heavy PDF
+      console.log(`"${filename}" has very little text (${text.length} chars), trying Claude OCR fallback...`);
+      return extractPdfWithClaude(buffer, filename);
+    }
+
+    return text;
+  } catch (err) {
+    console.error(`unpdf failed for ${filename}:`, err.message);
+    // Fall back to Claude API
+    console.log(`Falling back to Claude API for "${filename}"...`);
+    return extractPdfWithClaude(buffer, filename);
+  }
+}
+
+/** Claude OCR fallback — only for scanned/image PDFs where pdf-parse finds no text */
 const MAX_CLAUDE_FILE_SIZE = 25 * 1024 * 1024;
 
 async function extractPdfWithClaude(buffer, filename) {
@@ -94,7 +120,7 @@ async function extractPdfWithClaude(buffer, filename) {
 
   if (buffer.length > MAX_CLAUDE_FILE_SIZE) {
     const sizeMB = (buffer.length / (1024 * 1024)).toFixed(1);
-    return `[File "${filename}" is ${sizeMB} MB — too large for text extraction. Max: 25 MB.]`;
+    return `[File "${filename}" is ${sizeMB} MB — too large for OCR extraction. Max: 25 MB.]`;
   }
 
   try {
@@ -118,13 +144,7 @@ async function extractPdfWithClaude(buffer, filename) {
             },
             {
               type: 'text',
-              text: `Extract ALL text content from this PDF "${filename}". Include every piece of text — headings, body text, tables, captions, footnotes, headers, footers, page numbers, chart labels, and any text in images or diagrams.
-
-For tables, format them as tab-separated values with clear column headers.
-For financial data, preserve all numbers, percentages, and currency values exactly as shown.
-For charts/graphs, describe the data shown including axis labels and values.
-
-Output ONLY the extracted text, no commentary or explanation. Preserve the document's logical structure using headings and line breaks.`,
+              text: `Extract ALL text content from this PDF "${filename}". Include headings, body text, tables, captions, footnotes, headers, footers, page numbers, chart labels, and any text in images or diagrams. For tables, use tab-separated values. Preserve all numbers, percentages, and currency values exactly. Output ONLY the extracted text, no commentary.`,
             },
           ],
         },
@@ -132,11 +152,11 @@ Output ONLY the extracted text, no commentary or explanation. Preserve the docum
     });
 
     const text = response.content[0]?.text || '';
-    console.log(`Claude PDF extraction for "${filename}": ${text.length} chars`);
+    console.log(`Claude OCR fallback for "${filename}": ${text.length} chars`);
     return text;
   } catch (err) {
-    console.error(`Claude PDF extraction failed for ${filename}:`, err.message);
-    return `[Error extracting ${filename} with Claude: ${err.message}]`;
+    console.error(`Claude OCR fallback failed for ${filename}:`, err.message);
+    return `[Error extracting ${filename}: ${err.message}]`;
   }
 }
 
@@ -167,9 +187,9 @@ export async function extractText(buffer, filename) {
     return extractDocx(buffer, filename);
   }
 
-  // PDFs — Claude document API
+  // PDFs — pdf-parse (fast, local) with Claude OCR fallback for scanned docs
   if (ext === '.pdf') {
-    return extractPdfWithClaude(buffer, filename);
+    return extractPdf(buffer, filename);
   }
 
   return `[Error: Unsupported file type: ${ext}]`;
