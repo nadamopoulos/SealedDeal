@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       const { pathname, contentType } = req.body;
       const result = await createMultipartUpload(pathname, {
         token,
-        access: 'public',
+        access: 'private',
         contentType: contentType || 'application/octet-stream',
       });
       return res.json({
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 
       const part = await uploadPart(pathname, buffer, {
         token,
-        access: 'public',
+        access: 'private',
         uploadId,
         key,
         partNumber,
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       const { uploadId, key, pathname, parts } = req.body;
       const blob = await completeMultipartUpload(pathname, parts, {
         token,
-        access: 'public',
+        access: 'private',
         uploadId,
         key,
       });
