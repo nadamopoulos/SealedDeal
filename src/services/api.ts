@@ -129,102 +129,33 @@ export function uploadSmallFile(
 }
 
 /**
- * Upload a large file (> 4 MB) to Vercel Blob via server-side chunked
- * multipart upload. Each chunk is sent to our server (< 4 MB each),
- * and the server uploads it to Blob — no CORS issues at all.
+ * Upload a large file (> 4 MB) to Vercel Blob using the SDK's upload().
+ * The SDK handles the browser→Blob CDN upload directly via client tokens.
  *
- * 1. Server creates multipart upload
- * 2. Client sends base64 chunks to server → server uploads parts
- * 3. Server completes multipart upload → returns blob URL
- * 4. Register blob URL in Redis
+ * Key requirements for Vite:
+ * - vite.config aliases 'undici' and 'crypto' to @vercel/blob browser shims
+ * - access: 'private' because the Blob store is configured as private
  */
-const CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB binary → ~3.4 MB base64
-
 export async function uploadLargeFileToBlobAndRegister(
   dealId: string,
   file: File,
   onProgress?: (pct: number) => void
 ): Promise<UploadResult> {
-  const mpUrl = `${API_BASE}/deals/${dealId}/blob-multipart`;
-
-  // Step 1: Create multipart upload on server
   if (onProgress) onProgress(5);
 
-  const createRes = await fetch(mpUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'create',
-      pathname: file.name,
-      contentType: file.type || 'application/octet-stream',
-    }),
-  });
-  if (!createRes.ok) {
-    const err = await createRes.text();
-    throw new Error(`Multipart create failed for ${file.name}: ${err.slice(0, 200)}`);
-  }
-  const { uploadId, key } = await createRes.json();
+  const { upload } = await import('@vercel/blob/client');
 
-  // Step 2: Upload file in chunks
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-  const parts: { partNumber: number; etag: string }[] = [];
-
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
-    const chunk = file.slice(start, end);
-
-    // Convert chunk to base64 for JSON transport
-    const arrayBuf = await chunk.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuf).reduce((data, byte) => data + String.fromCharCode(byte), '')
-    );
-
-    const partRes = await fetch(mpUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'upload-part',
-        uploadId,
-        key,
-        pathname: file.name,
-        partNumber: i + 1,
-        chunkBase64: base64,
-      }),
+  let blob;
+  try {
+    blob = await upload(file.name, file, {
+      access: 'private',
+      handleUploadUrl: `${API_BASE}/deals/${dealId}/blob-upload`,
+      clientPayload: JSON.stringify({ dealId }),
     });
-
-    if (!partRes.ok) {
-      const err = await partRes.text();
-      throw new Error(`Chunk ${i + 1}/${totalChunks} failed for ${file.name}: ${err.slice(0, 200)}`);
-    }
-
-    const part = await partRes.json();
-    parts.push({ partNumber: part.partNumber, etag: part.etag });
-
-    // Progress: 10% - 80% for chunked upload
-    if (onProgress) {
-      const pct = 10 + Math.round(((i + 1) / totalChunks) * 70);
-      onProgress(pct);
-    }
+  } catch (uploadErr: any) {
+    const msg = uploadErr?.message || 'Unknown error';
+    throw new Error(`Blob upload failed for ${file.name}: ${msg}`);
   }
-
-  // Step 3: Complete multipart upload
-  const completeRes = await fetch(mpUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'complete',
-      uploadId,
-      key,
-      pathname: file.name,
-      parts,
-    }),
-  });
-  if (!completeRes.ok) {
-    const err = await completeRes.text();
-    throw new Error(`Multipart complete failed for ${file.name}: ${err.slice(0, 200)}`);
-  }
-  const blobData = await completeRes.json();
 
   if (onProgress) onProgress(85);
 
@@ -233,7 +164,7 @@ export async function uploadLargeFileToBlobAndRegister(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      blobUrl: blobData.url,
+      blobUrl: blob.url,
       fileName: file.name,
       fileSize: file.size,
     }),

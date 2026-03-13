@@ -8,10 +8,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      // @vercel/blob/client imports from 'undici' which is Node.js-only.
-      // The package has a browser shim but Vite doesn't apply the parent
-      // package's "browser" field. Alias undici to the shim explicitly.
+      // @vercel/blob/client imports 'undici' and 'crypto' which are Node.js-only.
+      // The package has browser shims but Vite doesn't apply the parent
+      // package's "browser" field. Alias both to the shims explicitly.
       'undici': path.resolve(__dirname, './node_modules/@vercel/blob/dist/undici-browser.js'),
+      'crypto': path.resolve(__dirname, './node_modules/@vercel/blob/dist/crypto-browser.js'),
     },
   },
   server: {
