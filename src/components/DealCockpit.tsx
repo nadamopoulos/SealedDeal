@@ -197,7 +197,7 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
     color: cs.color,
   }));
 
-  // DD Coverage score ring
+  // Deal Rating score ring
   const scorePercent = cockpit.overallScore;
   const circumference = 2 * Math.PI * 45;
   const offset = circumference - (scorePercent / 100) * circumference;
@@ -222,7 +222,7 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
   return (
     <div className="max-w-6xl mx-auto animate-fade-in space-y-5">
 
-      {/* ===== ROW 1: Signals (Hero) + DD Coverage + Risk Level ===== */}
+      {/* ===== ROW 1: Signals (Hero) + Deal Rating + Risk Level ===== */}
       <div className="grid grid-cols-12 gap-4">
 
         {/* Signal Count — PRIMARY above-the-fold element */}
@@ -261,10 +261,10 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
           </div>
         </div>
 
-        {/* DD Coverage Score */}
+        {/* Deal Rating Score */}
         <div className="col-span-6 md:col-span-3 bg-white border border-[#eaeaea] rounded-2xl p-5 flex flex-col items-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
           <p className="text-xs font-semibold text-[#888888] uppercase tracking-wider mb-3">
-            DD Coverage
+            Deal Rating
           </p>
           <div className="relative w-24 h-24">
             <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
