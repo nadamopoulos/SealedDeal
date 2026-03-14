@@ -12,17 +12,28 @@ const pdfParse = require('pdf-parse/lib/pdf-parse.js');
  * Categorize a document based on its filename.
  */
 export function categorizeDocument(filename) {
-  const name = filename.toLowerCase();
-  if (/financ|p&l|income|balance|cash.?flow|revenue|ebitda|budget|audit|tax|valuation|model|projection/i.test(name))
+  const name = (filename || '').toLowerCase();
+
+  // Financial: P&L, QoE, CIP, buildout costs, projections, valuations, audit
+  if (/financ|p[\-&]l|p\.l|income|balance|cash.?flow|revenue|ebitda|budget|audit|tax|valuation|model|projection|q\.?o\.?e|quality.?of.?earning|illustrative|buildout.?cost|capex|honeymoon|\bcip[\b_\s\-]|confidential.?information/i.test(name))
     return 'financial';
-  if (/legal|contract|agreement|compliance|regulat|license|patent|litigation|ip\b|trademark/i.test(name))
+
+  // Legal: FDD (Franchise Disclosure Document), contracts, compliance, IP
+  if (/legal|contract|agreement|compliance|regulat|license|patent|litigation|ip\b|trademark|fdd\b|franchise.?disclosure|disclosure.?doc/i.test(name))
     return 'legal';
-  if (/operat|process|supply|logistics|inventory|manufacturing|quality|kpi|sop|franchise.?agreement|capex/i.test(name))
+
+  // Operational: closure analysis, supply chain, SOP, store operations
+  if (/operat|process|supply|logistics|inventory|manufacturing|kpi|sop|franchise.?agreement|closure|store.?count|unit.?econ/i.test(name))
     return 'operational';
+
+  // Market: market study, competitive landscape, industry research
   if (/market|industry|compet|landscape|benchmark|customer|segment|tam|sam|research|trend/i.test(name))
     return 'market';
-  if (/manage|team|org|executive|board|leadership|cv|resume|bio|compensation|hiring/i.test(name))
+
+  // Management: payroll, employee census, org charts, team, HR
+  if (/manage|team|org|executive|board|leadership|cv|resume|bio|compensation|hiring|payroll|employee|census|headcount|staff|hr\b|human.?resource/i.test(name))
     return 'management';
+
   return 'other';
 }
 

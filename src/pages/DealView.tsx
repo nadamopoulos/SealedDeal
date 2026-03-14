@@ -341,7 +341,7 @@ export default function DealView() {
           />
         )}
         {activeTab === 'cockpit' && deal.analysis && (
-          <DealCockpit analysis={deal.analysis} deal={deal} />
+          <DealCockpit analysis={deal.analysis} deal={deal} onNavigateSignals={() => setActiveTab('signals')} />
         )}
         {activeTab === 'summary' && deal.analysis && (
           <CompanySummary deal={deal} />
