@@ -10,6 +10,7 @@ import PlaybookView from '../components/PlaybookView';
 import StructuredDataView from '../components/StructuredDataView';
 import SignalsView from '../components/SignalsView';
 import DealCockpit from '../components/DealCockpit';
+import AnalyticsView from '../components/AnalyticsView';
 import CompSetBuilder from '../components/CompSetBuilder';
 import DataRequestView from '../components/DataRequestView';
 import FloatingChat from '../components/FloatingChat';
@@ -18,6 +19,7 @@ import {
   ArrowLeft,
   Upload,
   Brain,
+  TrendingUp,
   FileText,
   BarChart3,
   Target,
@@ -33,6 +35,7 @@ import {
 
 const tabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] = [
   { id: 'cockpit', label: 'Deal Cockpit', icon: <Gauge className="w-4 h-4" /> },
+  { id: 'analytics', label: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
   { id: 'summary', label: 'Executive Summary', icon: <BookOpen className="w-4 h-4" /> },
   { id: 'playbook', label: 'DD Playbook', icon: <Target className="w-4 h-4" /> },
   { id: 'data', label: 'Structured Data', icon: <Database className="w-4 h-4" /> },
@@ -351,6 +354,13 @@ export default function DealView() {
             uploadProgress={uploadProgress}
             uploadFileIndex={uploadFileIndex}
             uploadFileCount={uploadFileCount}
+          />
+        )}
+        {activeTab === 'analytics' && deal.analysis && (
+          <AnalyticsView
+            analytics={deal.analysis.analytics || { timeSeries: [], distributions: [] }}
+            dealName={deal.name}
+            company={deal.company}
           />
         )}
         {activeTab === 'cockpit' && deal.analysis && (

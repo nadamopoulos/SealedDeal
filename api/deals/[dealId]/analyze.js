@@ -217,6 +217,87 @@ Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
     "investmentHighlights": ["Highlight 1", "Highlight 2", "Highlight 3"],
     "keyRisks": ["Risk 1", "Risk 2", "Risk 3"],
     "nextSteps": ["Next step 1", "Next step 2", "Next step 3"]
+  },
+  "analytics": {
+    "timeSeries": [
+      {
+        "id": "unique-id",
+        "title": "Systemwide Sales",
+        "subtitle": "US and International combined",
+        "insight": "Bold one-liner takeaway, e.g. 'Systemwide sales has grown by ~10% p.a. since 2020'",
+        "unit": "$M",
+        "chartType": "stacked-bar|bar|line|area",
+        "cagr": "+10.1%",
+        "series": [
+          {
+            "name": "US",
+            "color": "#673ab7",
+            "data": [
+              { "period": "2020", "value": 135 },
+              { "period": "2021", "value": 172 }
+            ]
+          },
+          {
+            "name": "International",
+            "color": "#4A9E8E",
+            "data": [
+              { "period": "2020", "value": 98 },
+              { "period": "2021", "value": 101 }
+            ]
+          }
+        ]
+      }
+    ],
+    "distributions": [
+      {
+        "id": "unique-id",
+        "title": "2025 Store-Level Sales Distribution",
+        "subtitle": "Dine In Format",
+        "insight": "There is a wide dispersion of annual sales for dine in stores",
+        "unit": "$M",
+        "stats": {
+          "mean": 1.51,
+          "median": 1.41,
+          "q1": 0.982,
+          "q3": 1.89,
+          "min": 0.3,
+          "max": 4.2
+        },
+        "dataPoints": [1.2, 1.5, 0.8, 2.1, 1.9]
+      }
+    ],
+    "geographicMix": {
+      "insight": "US represents 55-60% of systemwide sales",
+      "regions": [
+        {
+          "name": "US",
+          "values": [
+            { "period": "2020", "amount": 135, "pct": 57.9 },
+            { "period": "2021", "amount": 172, "pct": 63.1 }
+          ]
+        }
+      ]
+    },
+    "cohortAnalysis": {
+      "insight": "All cohorts decline over time across sales and size",
+      "cohorts": [
+        {
+          "name": "2020 Cohort",
+          "storeCount": 10,
+          "data": [
+            { "period": "2020", "avgAUV": 1200, "storeCount": 10 },
+            { "period": "2021", "avgAUV": 1150, "storeCount": 9 }
+          ]
+        }
+      ]
+    },
+    "closureAnalysis": {
+      "insight": "Closings spiked in 2025 with a 9.3% closure rate",
+      "data": [
+        { "period": "2020", "closures": 5, "closureRate": 4.3, "avgAUVOfClosed": 1063 },
+        { "period": "2021", "closures": 2, "closureRate": 1.8, "avgAUVOfClosed": 1081 }
+      ]
+    }
   }
 }
 
@@ -232,11 +313,21 @@ REQUIREMENTS:
 - All source fields MUST reference exact document filenames from the data room
 - Missing playbook metrics MUST have suggestedDocType explaining what to request
 - The businessSummary in cockpit must be dense and educational — NOT a buy/don't-buy recommendation
-- Overall score 0-100`;
+- Overall score 0-100
+- The "analytics" section should extract TIME-SERIES data from spreadsheets and financial documents. Look for multi-year revenue, store count, AUV, SSS, and other metrics presented in tabular or chart form in the documents.
+- For timeSeries: extract 3-8 charts covering key business metrics over time. Always include systemwide sales, store count, and sales per store if available. Use "stacked-bar" chartType when there are multiple segments (e.g., US vs International). Use "bar" for single series. Use "line" for monthly/rolling data with many periods.
+- For distributions: extract store-level spread data when available (e.g., individual store AUVs). Calculate or extract mean, median, Q1, Q3 statistics. Include actual dataPoints array if individual values are available (up to 200 points).
+- For geographicMix: extract sales breakdown by country/region if available.
+- For cohortAnalysis: extract performance by store opening year/vintage if available.
+- For closureAnalysis: extract store closure counts and rates over time if available.
+- Every analytics item MUST have an "insight" field — a bold, analytical one-liner summarizing the key takeaway (e.g., "Systemwide sales has grown by ~10% p.a. since 2020"). Write insights like a McKinsey consultant.
+- CAGR values should be calculated where possible. Format as "+X.X%" or "-X.X%".
+- If the documents don't contain enough data for a section (e.g., no cohort data), omit that section or return an empty array/null — don't fabricate data.
+- Color suggestions for series: use "#673ab7" (purple) for primary, "#4A9E8E" (green) for secondary, "#B8914A" (amber) for tertiary, "#C45B5B" (red) for quaternary. Additional series can use "#6B7280", "#8B5CF6", "#059669", "#D97706".`;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 16000,
+      max_tokens: 24000,
       system: systemPrompt,
       messages: [{ role: 'user', content: analysisPrompt }],
     });

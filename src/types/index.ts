@@ -72,7 +72,64 @@ export interface DealAnalysis {
   structuredData: StructuredDataSection[];
   signals: SignalsAnalysis;
   cockpit: DealCockpit;
+  analytics?: DealAnalytics | null;
   analyzedAt: string;
+}
+
+// === Analytics (chart-heavy investment analytics) ===
+export interface AnalyticsTimeSeries {
+  id: string;
+  title: string;
+  subtitle?: string;
+  insight: string;
+  unit: string;
+  chartType: 'stacked-bar' | 'bar' | 'line' | 'area';
+  cagr?: string;
+  series: {
+    name: string;
+    color: string;
+    data: { period: string; value: number }[];
+  }[];
+}
+
+export interface AnalyticsDistribution {
+  id: string;
+  title: string;
+  subtitle?: string;
+  insight: string;
+  unit: string;
+  stats: { mean: number; median: number; q1: number; q3: number; min?: number; max?: number };
+  dataPoints?: number[];
+}
+
+export interface AnalyticsGeographicMix {
+  insight: string;
+  regions: {
+    name: string;
+    values: { period: string; amount: number; pct: number }[];
+  }[];
+}
+
+export interface AnalyticsCohort {
+  insight: string;
+  cohorts: {
+    name: string;
+    storeCount: number;
+    data: { period: string; avgAUV: number; storeCount: number }[];
+  }[];
+}
+
+export interface AnalyticsClosures {
+  insight: string;
+  data: { period: string; closures: number; closureRate: number; avgAUVOfClosed?: number }[];
+}
+
+export interface DealAnalytics {
+  timeSeries: AnalyticsTimeSeries[];
+  distributions: AnalyticsDistribution[];
+  geographicMix?: AnalyticsGeographicMix | null;
+  cohortAnalysis?: AnalyticsCohort | null;
+  closureAnalysis?: AnalyticsClosures | null;
 }
 
 export interface CompanySummary {
@@ -189,7 +246,7 @@ export interface KPI {
   slices?: KPISlice[];
 }
 
-export type AnalysisTab = 'cockpit' | 'summary' | 'playbook' | 'data' | 'signals' | 'comps' | 'dataRequest' | 'documents' | 'qa';
+export type AnalysisTab = 'cockpit' | 'analytics' | 'summary' | 'playbook' | 'data' | 'signals' | 'comps' | 'dataRequest' | 'documents' | 'qa';
 
 // === IC Memo ===
 export interface MemoSection {
