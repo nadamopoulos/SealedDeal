@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { PlaybookCategory } from '../types';
-import { generateDataRequest } from '../utils/generateDataRequest';
-import { downloadMarkdown } from '../utils/downloadMarkdown';
+
+
 import {
   ChevronDown,
   ChevronRight,
@@ -10,9 +10,7 @@ import {
   XCircle,
   MinusCircle,
   FileText,
-  FileDown,
   ClipboardList,
-  Loader2,
 } from 'lucide-react';
 
 interface Props {
@@ -77,8 +75,6 @@ function ProgressBar({
 
 export default function PlaybookView({ playbook, dealName, company, onAskQuestion }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set([0]));
-  const [isGenerating, setIsGenerating] = useState(false);
-
   const toggle = (i: number) => {
     const next = new Set(expanded);
     if (next.has(i)) next.delete(i);
@@ -99,21 +95,6 @@ export default function PlaybookView({ playbook, dealName, company, onAskQuestio
 
   const actionableCount = (totals.missing || 0) + (totals.partial || 0);
   const hasActionableMetrics = actionableCount > 0;
-
-  const handleGenerateDataRequest = async () => {
-    setIsGenerating(true);
-    // Small delay so the spinner renders before the synchronous work
-    await new Promise((r) => setTimeout(r, 50));
-
-    const name = dealName || 'Deal';
-    const comp = company || 'Company';
-    const md = generateDataRequest(name, comp, playbook);
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `${name.replace(/\s+/g, '_')}_Data_Request_${dateStr}.md`;
-    downloadMarkdown(md, filename);
-
-    setIsGenerating(false);
-  };
 
   return (
     <div className="max-w-5xl mx-auto animate-fade-in">
@@ -152,35 +133,19 @@ export default function PlaybookView({ playbook, dealName, company, onAskQuestio
           />
         </div>
 
-        {/* Generate Data Request */}
+        {/* Data Request Link */}
         <div className="pt-1 flex items-center justify-between">
           <span className="text-xs text-[#888888]">
             {hasActionableMetrics
               ? `${actionableCount} metric${actionableCount !== 1 ? 's' : ''} require additional data`
               : 'All metrics addressed'}
           </span>
-          <button
-            onClick={handleGenerateDataRequest}
-            disabled={!hasActionableMetrics || isGenerating}
-            title={!hasActionableMetrics ? 'All metrics addressed' : 'Download a structured data request document'}
-            className={`flex items-center gap-2 px-4 py-2 rounded text-xs font-mono font-medium transition-all ${
-              hasActionableMetrics && !isGenerating
-                ? 'bg-[#673ab7] hover:bg-[#5e35a1] text-white shadow-sm'
-                : 'bg-[#f5f5f5] text-[#a1a1a1] border border-[#eaeaea] cursor-not-allowed'
-            }`}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <FileDown className="w-3.5 h-3.5" />
-                Generate Data Request
-              </>
-            )}
-          </button>
+          {hasActionableMetrics && (
+            <span className="flex items-center gap-1.5 text-xs text-[#673ab7] font-mono">
+              <ClipboardList className="w-3.5 h-3.5" />
+              See Data Request tab &rarr;
+            </span>
+          )}
         </div>
       </div>
 

@@ -17,6 +17,7 @@ export interface CompConcept {
   initialInvestmentNum: number;
   geography: string;
   yearFounded: number;
+  isEstimated?: boolean;
 }
 
 export const COMP_DATABASE: CompConcept[] = [

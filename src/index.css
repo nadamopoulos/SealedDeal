@@ -100,3 +100,31 @@ body {
 .font-heading { font-family: var(--font-heading); }
 .font-mono { font-family: var(--font-mono); }
 .font-body { font-family: var(--font-body); }
+
+/* Print styles for Data Request PDF export */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-data-request,
+  .print-data-request * {
+    visibility: visible;
+  }
+  .print-data-request {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 40px;
+    font-family: 'Inter', sans-serif;
+    color: #171717;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    margin: 0.5in;
+    size: A4;
+  }
+}

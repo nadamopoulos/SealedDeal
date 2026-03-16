@@ -189,7 +189,7 @@ export interface KPI {
   slices?: KPISlice[];
 }
 
-export type AnalysisTab = 'cockpit' | 'summary' | 'playbook' | 'data' | 'signals' | 'comps' | 'documents' | 'qa';
+export type AnalysisTab = 'cockpit' | 'summary' | 'playbook' | 'data' | 'signals' | 'comps' | 'dataRequest' | 'documents' | 'qa';
 
 // === IC Memo ===
 export interface MemoSection {

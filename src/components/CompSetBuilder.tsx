@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { Deal, DealAnalysis, KPI } from '../types';
 import { COMP_DATABASE, COMP_CATEGORIES, searchComps } from '../data/compDatabase';
 import type { CompConcept } from '../data/compDatabase';
+import { researchComp } from '../services/api';
 import {
   Search,
   X,
@@ -13,6 +14,8 @@ import {
   Building2,
   MapPin,
   Calendar,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 
 interface Props {
@@ -142,16 +145,59 @@ export default function CompSetBuilder({ deal, analysis }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedCompIds, setSelectedCompIds] = useState<string[]>([]);
+  const [customComps, setCustomComps] = useState<CompConcept[]>([]);
+  const [researchInput, setResearchInput] = useState('');
+  const [isResearching, setIsResearching] = useState(false);
+  const [researchError, setResearchError] = useState('');
 
-  const filteredComps = useMemo(
-    () => searchComps(searchQuery, selectedCategory),
-    [searchQuery, selectedCategory]
-  );
+  const allComps = useMemo(() => [...COMP_DATABASE, ...customComps], [customComps]);
+
+  const filteredComps = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return allComps.filter((comp) => {
+      const matchesCategory = !selectedCategory || selectedCategory === 'All' || comp.category === selectedCategory;
+      const matchesQuery = !q || comp.name.toLowerCase().includes(q) || comp.category.toLowerCase().includes(q);
+      return matchesCategory && matchesQuery;
+    });
+  }, [searchQuery, selectedCategory, allComps]);
 
   const selectedComps = useMemo(
-    () => selectedCompIds.map((id) => COMP_DATABASE.find((c) => c.id === id)!).filter(Boolean),
-    [selectedCompIds]
+    () => selectedCompIds.map((id) => allComps.find((c) => c.id === id)!).filter(Boolean),
+    [selectedCompIds, allComps]
   );
+
+  const handleResearch = async () => {
+    const name = researchInput.trim();
+    if (!name || isResearching) return;
+
+    // Check if already exists
+    if (allComps.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      setResearchError(`"${name}" is already in the comp set.`);
+      return;
+    }
+
+    setIsResearching(true);
+    setResearchError('');
+
+    try {
+      const { comp } = await researchComp(name);
+      // Ensure unique id
+      const existingIds = new Set(allComps.map((c) => c.id));
+      if (existingIds.has(comp.id)) {
+        comp.id = `${comp.id}-${Date.now()}`;
+      }
+      setCustomComps((prev) => [...prev, comp]);
+      // Auto-select if under limit
+      if (selectedCompIds.length < MAX_COMPS) {
+        setSelectedCompIds((prev) => [...prev, comp.id]);
+      }
+      setResearchInput('');
+    } catch (err: any) {
+      setResearchError(err.message || 'Research failed. Please try again.');
+    } finally {
+      setIsResearching(false);
+    }
+  };
 
   const addComp = (id: string) => {
     if (selectedCompIds.length >= MAX_COMPS || selectedCompIds.includes(id)) return;
@@ -177,6 +223,71 @@ export default function CompSetBuilder({ deal, analysis }: Props) {
         <p className="font-body text-[13px]" style={{ color: DS.gray500 }}>
           Compare {deal.company} KPIs against franchise and QSR benchmarks. Select up to {MAX_COMPS} comparable concepts.
         </p>
+      </div>
+
+      {/* AI Research Section */}
+      <div className="rounded-[4px] p-5" style={{ boxShadow: 'var(--shadow-container)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-3.5 h-3.5" style={{ color: DS.purple }} />
+          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]" style={{ color: DS.purple }}>
+            AI Company Research
+          </span>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={researchInput}
+            onChange={(e) => {
+              setResearchInput(e.target.value);
+              if (researchError) setResearchError('');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleResearch();
+            }}
+            placeholder="Enter any company name..."
+            disabled={isResearching}
+            className="flex-1 px-4 py-2.5 rounded-[4px] border text-[13px] font-body transition-colors outline-none"
+            style={{
+              borderColor: researchError ? DS.red : DS.gray200,
+              color: DS.black,
+              background: DS.gray100,
+              opacity: isResearching ? 0.6 : 1,
+            }}
+            onFocus={(e) => {
+              if (!researchError) e.currentTarget.style.borderColor = DS.purple;
+            }}
+            onBlur={(e) => {
+              if (!researchError) e.currentTarget.style.borderColor = DS.gray200;
+            }}
+          />
+          <button
+            onClick={handleResearch}
+            disabled={isResearching || !researchInput.trim()}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[4px] font-mono text-[12px] font-medium transition-all"
+            style={{
+              backgroundColor: isResearching || !researchInput.trim() ? `${DS.purple}40` : DS.purple,
+              color: 'white',
+              cursor: isResearching || !researchInput.trim() ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isResearching ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Researching {researchInput.trim()}...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                Research with AI
+              </>
+            )}
+          </button>
+        </div>
+        {researchError && (
+          <p className="mt-2 font-body text-[12px]" style={{ color: DS.red }}>
+            {researchError}
+          </p>
+        )}
       </div>
 
       {/* Search + Category Filters */}
@@ -396,6 +507,15 @@ export default function CompSetBuilder({ deal, analysis }: Props) {
                         <MapPin className="w-2.5 h-2.5" />
                         {comp.geography}
                       </span>
+                      {comp.isEstimated && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[2px] font-mono text-[9px] font-medium"
+                          style={{ backgroundColor: `${DS.purple}14`, color: DS.purple }}
+                        >
+                          <Sparkles className="w-2.5 h-2.5" />
+                          AI
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div

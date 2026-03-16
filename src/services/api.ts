@@ -1,4 +1,5 @@
 import type { Deal, DealAnalysis, Document, DocCategory } from '../types';
+import type { CompConcept } from '../data/compDatabase';
 
 const API_BASE = '/api';
 
@@ -304,5 +305,18 @@ export async function askDeal(params: {
   if (!res.ok) {
     throw new Error(data.error || 'Q&A failed');
   }
+  return data;
+}
+
+// ─── Comp Research ────────────────────────────────────────────
+
+export async function researchComp(companyName: string): Promise<{ comp: CompConcept }> {
+  const res = await fetch(`${API_BASE}/comps/research`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ companyName }),
+  });
+  const data = await parseJsonResponse(res);
+  if (!res.ok) throw new Error(data.error || 'Failed to research company');
   return data;
 }
