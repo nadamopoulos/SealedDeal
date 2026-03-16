@@ -19,6 +19,13 @@ export default function DealsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [showCreate, setShowCreate] = useState(searchParams.get('new') === '1');
+
+  // React to ?new=1 query param changes (e.g., sidebar "New Deal" button)
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setShowCreate(true);
+    }
+  }, [searchParams]);
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState({
