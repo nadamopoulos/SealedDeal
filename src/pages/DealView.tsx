@@ -10,6 +10,7 @@ import PlaybookView from '../components/PlaybookView';
 import StructuredDataView from '../components/StructuredDataView';
 import SignalsView from '../components/SignalsView';
 import DealCockpit from '../components/DealCockpit';
+import CompSetBuilder from '../components/CompSetBuilder';
 import FloatingChat from '../components/FloatingChat';
 import ICMemoExport from '../components/ICMemoExport';
 import {
@@ -34,6 +35,7 @@ const tabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] = [
   { id: 'playbook', label: 'DD Playbook', icon: <Target className="w-4 h-4" /> },
   { id: 'data', label: 'Structured Data', icon: <Database className="w-4 h-4" /> },
   { id: 'signals', label: 'Signals & Flags', icon: <AlertTriangle className="w-4 h-4" /> },
+  { id: 'comps', label: 'Comp Set', icon: <BarChart3 className="w-4 h-4" /> },
   { id: 'documents', label: 'Documents', icon: <FileText className="w-4 h-4" /> },
 ];
 
@@ -384,6 +386,9 @@ export default function DealView() {
         )}
         {activeTab === 'signals' && deal.analysis && (
           <SignalsView signals={deal.analysis.signals} />
+        )}
+        {activeTab === 'comps' && deal.analysis && (
+          <CompSetBuilder deal={deal} analysis={deal.analysis} />
         )}
       </div>
 

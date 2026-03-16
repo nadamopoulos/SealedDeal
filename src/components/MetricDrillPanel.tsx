@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KPI } from '../types';
+import MetricSliceView from './MetricSliceView';
 import {
   X,
   TrendingUp,
@@ -331,6 +332,22 @@ export default function MetricDrillPanel({ metric, dealId, onClose, onAskQuestio
               </p>
             )}
           </section>
+
+          {/* ============ Section 2.5: Geo & Cohort Slicing ============ */}
+          {metric.slices && metric.slices.length > 0 && (
+            <>
+              <div style={{ borderTop: `1px solid ${DS.gray200}` }} />
+              <section>
+                <p
+                  className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] mb-4"
+                  style={{ color: DS.gray400 }}
+                >
+                  Performance Slicing
+                </p>
+                <MetricSliceView slices={metric.slices} metricName={metric.name} />
+              </section>
+            </>
+          )}
 
           {/* Divider */}
           <div style={{ borderTop: `1px solid ${DS.gray200}` }} />

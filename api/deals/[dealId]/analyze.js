@@ -202,7 +202,16 @@ Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
         "percentile": 75,
         "commentary": "One-line AI insight specific to this company's segment, e.g. 'Top quartile for Asian fast-casual franchise concepts'",
         "status": "good|warning|critical|neutral",
-        "source": "Source document"
+        "source": "Source document",
+        "slices": [
+          {
+            "dimension": "geography|cohort|format|vintage",
+            "label": "By Region (human-readable label)",
+            "segments": [
+              { "name": "Southeast", "value": "4.2%", "valueNum": 4.2, "count": 12, "trend": "up" }
+            ]
+          }
+        ]
       }
     ],
     "investmentHighlights": ["Highlight 1", "Highlight 2", "Highlight 3"],
@@ -218,6 +227,7 @@ REQUIREMENTS:
 - Every signal MUST have "reasoning" and "suggestedAction"
 - 8-12 category scores and 8-12 KPIs
 - Every KPI MUST have benchmarkLow, benchmarkHigh (numbers), percentile (0-100), and commentary (one-liner)
+- For KPIs where geographic, cohort, format, or vintage breakdowns can be inferred from the documents, add a "slices" array. Only include slices when the documents contain enough data to construct them. Most KPIs won't have slices. Focus on SSS, AUV, and store-level metrics that often have geographic or vintage breakdowns in franchise FDDs and financial reports.
 - Category score colors: green (#22c55e) for >7, yellow (#eab308) for 5-7, red (#ef4444) for <5
 - All source fields MUST reference exact document filenames from the data room
 - Missing playbook metrics MUST have suggestedDocType explaining what to request

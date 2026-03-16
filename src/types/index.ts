@@ -160,6 +160,20 @@ export interface CategoryScore {
   details: string;
 }
 
+export interface KPISlice {
+  dimension: 'geography' | 'cohort' | 'format' | 'vintage';
+  label: string; // e.g., "By Region", "By Store Vintage"
+  segments: KPISegment[];
+}
+
+export interface KPISegment {
+  name: string; // e.g., "Southeast", "2020-2022 cohort"
+  value: string;
+  valueNum: number;
+  count?: number; // number of units in this segment
+  trend?: 'up' | 'down' | 'stable';
+}
+
 export interface KPI {
   name: string;
   value: string;
@@ -172,9 +186,10 @@ export interface KPI {
   commentary?: string; // AI one-liner, e.g., "Top quartile for Asian fast-casual"
   status: 'good' | 'warning' | 'critical' | 'neutral';
   source?: string;
+  slices?: KPISlice[];
 }
 
-export type AnalysisTab = 'cockpit' | 'summary' | 'playbook' | 'data' | 'signals' | 'documents' | 'qa';
+export type AnalysisTab = 'cockpit' | 'summary' | 'playbook' | 'data' | 'signals' | 'comps' | 'documents' | 'qa';
 
 // === IC Memo ===
 export interface MemoSection {
