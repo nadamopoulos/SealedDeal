@@ -258,27 +258,43 @@ REQUIREMENTS:
 
     analysis.analyzedAt = new Date().toISOString();
 
-    // Persist analysis to Redis
+    // Persist analysis to Redis — stored in a SEPARATE key to avoid deal JSON bloat
     if (redis) {
       try {
         const raw = await redis.get(`deal:${dealId}`);
         if (raw) {
           const deal = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+          // Check if there's an existing analysis (in separate key or embedded)
+          let hadPriorAnalysis = !!deal.analysis;
+          if (!hadPriorAnalysis) {
+            try {
+              hadPriorAnalysis = !!(await redis.get(`deal:${dealId}:analysis`));
+            } catch {}
+          }
+
           // Append score snapshot
           const snapshot = {
             score: analysis.cockpit.overallScore,
             rating: analysis.cockpit.overallRating,
             timestamp: new Date().toISOString(),
             docCount: (deal.documents || []).filter((d) => d.status === 'extracted').length,
-            trigger: deal.analysis
+            trigger: hadPriorAnalysis
               ? `Re-analysis (${(deal.documents || []).length} docs)`
               : `Initial analysis (${(deal.documents || []).length} docs)`,
           };
-          deal.analysis = analysis;
+
+          // Remove embedded analysis from deal (migrate to separate key)
+          delete deal.analysis;
           deal.status = 'reviewed';
           deal.scoreHistory = [...(deal.scoreHistory || []), snapshot];
           deal.updatedAt = new Date().toISOString();
-          await redis.set(`deal:${dealId}`, JSON.stringify(deal));
+
+          // Save deal metadata (small) and analysis (large) separately
+          await Promise.all([
+            redis.set(`deal:${dealId}`, JSON.stringify(deal)),
+            redis.set(`deal:${dealId}:analysis`, JSON.stringify(analysis)),
+          ]);
         }
       } catch (redisErr) {
         console.error('Redis analysis persist error:', redisErr);

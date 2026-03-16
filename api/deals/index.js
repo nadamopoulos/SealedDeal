@@ -15,9 +15,27 @@ export default async function handler(req, res) {
       const keys = ids.map((id) => `deal:${id}`);
       const raw = await redis.mget(...keys);
 
-      const deals = raw
-        .filter(Boolean)
-        .map((d) => (typeof d === 'string' ? JSON.parse(d) : d));
+      const deals = [];
+      for (const d of raw) {
+        if (!d) continue;
+        try {
+          const deal = typeof d === 'string' ? JSON.parse(d) : d;
+          // For list view, load analysis summary from separate key if needed
+          if (!deal.analysis) {
+            try {
+              const analysisRaw = await redis.get(`deal:${deal.id}:analysis`);
+              if (analysisRaw) {
+                const analysis = typeof analysisRaw === 'string' ? JSON.parse(analysisRaw) : analysisRaw;
+                // Only include cockpit summary for list view (keeps payload small)
+                deal.analysis = { cockpit: analysis.cockpit };
+              }
+            } catch {}
+          }
+          deals.push(deal);
+        } catch (parseErr) {
+          console.error('Corrupt deal JSON, skipping:', parseErr.message);
+        }
+      }
 
       res.json({ deals });
     } catch (err) {
