@@ -75,7 +75,7 @@ function ProgressBar({
   );
 }
 
-export default function PlaybookView({ playbook, dealName, company }: Props) {
+export default function PlaybookView({ playbook, dealName, company, onAskQuestion }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set([0]));
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -279,7 +279,18 @@ export default function PlaybookView({ playbook, dealName, company }: Props) {
                               </td>
                               <td className="px-4 py-3 text-sm text-[#666666]">{metric.expected}</td>
                               <td className="px-4 py-3 text-sm text-[#171717]">
-                                {metric.actual || (
+                                {metric.actual ? (
+                                  (metric.status === 'met' || metric.status === 'partial') && onAskQuestion ? (
+                                    <button
+                                      onClick={() => onAskQuestion(`Tell me more about "${metric.name}" with actual value "${metric.actual}"`)}
+                                      className="text-left hover:underline hover:decoration-[#673ab7]/40 hover:underline-offset-2 transition-colors hover:text-[#673ab7]"
+                                    >
+                                      {metric.actual}
+                                    </button>
+                                  ) : (
+                                    <span>{metric.actual}</span>
+                                  )
+                                ) : (
                                   <span className="text-[#a1a1a1] italic">Not found</span>
                                 )}
                               </td>

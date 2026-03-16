@@ -354,8 +354,8 @@ export default function DealView() {
             deal={deal}
             onNavigateSignals={() => setActiveTab('signals')}
             onAskQuestion={(question) => {
-              sessionStorage.setItem(`pending-qa-${deal.id}`, question);
-              setActiveTab('qa');
+              setPendingPrompt(question);
+              setChatOpen(true);
             }}
           />
         )}
@@ -363,10 +363,24 @@ export default function DealView() {
           <CompanySummary deal={deal} />
         )}
         {activeTab === 'playbook' && deal.analysis && (
-          <PlaybookView playbook={deal.analysis.playbook} dealName={deal.name} company={deal.company} />
+          <PlaybookView
+            playbook={deal.analysis.playbook}
+            dealName={deal.name}
+            company={deal.company}
+            onAskQuestion={(question) => {
+              setPendingPrompt(question);
+              setChatOpen(true);
+            }}
+          />
         )}
         {activeTab === 'data' && deal.analysis && (
-          <StructuredDataView data={deal.analysis.structuredData} />
+          <StructuredDataView
+            data={deal.analysis.structuredData}
+            onAskQuestion={(question) => {
+              setPendingPrompt(question);
+              setChatOpen(true);
+            }}
+          />
         )}
         {activeTab === 'signals' && deal.analysis && (
           <SignalsView signals={deal.analysis.signals} />

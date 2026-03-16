@@ -3,6 +3,7 @@ import { Database, ChevronRight, FileText } from 'lucide-react';
 
 interface Props {
   data: StructuredDataSection[];
+  onAskQuestion?: (question: string) => void;
 }
 
 const confidenceColors = {
@@ -11,7 +12,7 @@ const confidenceColors = {
   low: 'text-[#e5484d] bg-[#e5484d]/10',
 };
 
-export default function StructuredDataView({ data }: Props) {
+export default function StructuredDataView({ data, onAskQuestion }: Props) {
   const totalItems = data.reduce((sum, s) => sum + s.items.length, 0);
 
   return (
@@ -33,39 +34,55 @@ export default function StructuredDataView({ data }: Props) {
               <span className="text-xs text-[#888888] ml-auto">{section.items.length} items</span>
             </div>
             <div className="divide-y divide-[#f0f0f0]">
-              {section.items.map((item, j) => (
-                <div
-                  key={j}
-                  className="px-4 py-3 flex items-center gap-4 hover:bg-[#f5f5f5] transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#666666]">{item.label}</p>
-                    {item.source && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <FileText className="w-3 h-3 text-[#a1a1a1] flex-shrink-0" />
-                        <p className="text-xs text-[#a1a1a1] truncate">
-                          Source: {item.source}
-                          {item.pageRef && <span>, p.{item.pageRef}</span>}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-[#171717]">
-                      {item.value}
-                      {item.unit && <span className="text-[#666666] font-normal ml-1">{item.unit}</span>}
-                    </p>
-                    {item.period && <p className="text-xs text-[#888888]">{item.period}</p>}
-                  </div>
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
-                      confidenceColors[item.confidence]
+              {section.items.map((item, j) => {
+                const isClickable = !!onAskQuestion;
+                const Row = isClickable ? 'button' : 'div';
+                return (
+                  <Row
+                    key={j}
+                    className={`px-4 py-3 flex items-center gap-4 hover:bg-[#f5f5f5] transition-colors w-full text-left ${
+                      isClickable ? 'cursor-pointer group' : ''
                     }`}
+                    {...(isClickable
+                      ? {
+                          onClick: () =>
+                            onAskQuestion!(
+                              `Tell me more about "${item.label}" with value "${item.value}${item.unit ? ' ' + item.unit : ''}"`
+                            ),
+                        }
+                      : {})}
                   >
-                    {item.confidence}
-                  </span>
-                </div>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm text-[#666666] ${isClickable ? 'group-hover:text-[#673ab7] transition-colors' : ''}`}>
+                        {item.label}
+                      </p>
+                      {item.source && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <FileText className="w-3 h-3 text-[#a1a1a1] flex-shrink-0" />
+                          <p className="text-xs text-[#a1a1a1] truncate">
+                            Source: {item.source}
+                            {item.pageRef && <span>, p.{item.pageRef}</span>}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-semibold text-[#171717] ${isClickable ? 'group-hover:underline group-hover:decoration-[#673ab7]/40 group-hover:underline-offset-2' : ''}`}>
+                        {item.value}
+                        {item.unit && <span className="text-[#666666] font-normal ml-1">{item.unit}</span>}
+                      </p>
+                      {item.period && <p className="text-xs text-[#888888]">{item.period}</p>}
+                    </div>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
+                        confidenceColors[item.confidence]
+                      }`}
+                    >
+                      {item.confidence}
+                    </span>
+                  </Row>
+                );
+              })}
             </div>
           </div>
         ))}

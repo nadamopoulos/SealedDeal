@@ -33,6 +33,18 @@ export default function DealQA({ deal }: Props) {
     }
   }, [messages, isLoading]);
 
+  // Pick up pending question from drill-down panel or other views
+  useEffect(() => {
+    const key = `pending-qa-${deal.id}`;
+    const pending = sessionStorage.getItem(key);
+    if (pending) {
+      sessionStorage.removeItem(key);
+      // Small delay to let the component mount before submitting
+      const timer = setTimeout(() => handleSubmit(pending), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [deal.id]);
+
   const handleSubmit = async (question: string) => {
     if (!question.trim() || isLoading) return;
 
