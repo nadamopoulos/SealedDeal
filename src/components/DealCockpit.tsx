@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   Shield,
-  Lightbulb,
   ListChecks,
   Target,
   Activity,
@@ -34,54 +33,73 @@ interface Props {
   onNavigateSignals?: (category?: string) => void;
 }
 
-const riskColors = {
-  low: { text: 'text-[#46a758]', bg: 'bg-[#46a758]/10', border: 'border-[#46a758]/30' },
-  moderate: { text: 'text-[#f5a524]', bg: 'bg-[#f5a524]/10', border: 'border-[#f5a524]/30' },
-  high: { text: 'text-[#f97316]', bg: 'bg-[#f97316]/10', border: 'border-[#f97316]/30' },
-  critical: { text: 'text-[#e5484d]', bg: 'bg-[#e5484d]/10', border: 'border-[#e5484d]/30' },
+// Talonic functional colors (desaturated, professional)
+const DS = {
+  green: '#4A9E8E',
+  greenDark: '#3D8578',
+  amber: '#B8914A',
+  amberDark: '#9A7A3E',
+  red: '#C45B5B',
+  redDark: '#A84C4C',
+  purple: '#673ab7',
+  black: '#0a0a0a',
+  gray700: '#404040',
+  gray600: '#525252',
+  gray500: '#737373',
+  gray400: '#a3a3a3',
+  gray300: '#d4d4d4',
+  gray200: '#e5e5e5',
+  gray100: '#f5f5f5',
 };
 
-const statusBarColors = {
-  good: '#46a758',
-  warning: '#f5a524',
-  critical: '#e5484d',
-  neutral: '#888888',
+const riskConfig: Record<string, { color: string; borderColor: string }> = {
+  low: { color: DS.green, borderColor: DS.green },
+  moderate: { color: DS.amber, borderColor: DS.amber },
+  high: { color: DS.red, borderColor: DS.red },
+  critical: { color: DS.redDark, borderColor: DS.redDark },
 };
 
-// Percentile-aware colors for KPI badges and trends
+// Percentile → desaturated color
 function getPercentileColor(percentile: number | undefined | null) {
-  if (percentile == null) return { badge: 'bg-[#888888]/10 text-[#888888]', text: 'text-[#888888]' };
-  if (percentile >= 75) return { badge: 'bg-[#46a758]/12 text-[#46a758]', text: 'text-[#46a758]' };
-  if (percentile >= 25) return { badge: 'bg-[#f5a524]/12 text-[#f5a524]', text: 'text-[#f5a524]' };
-  return { badge: 'bg-[#e5484d]/12 text-[#e5484d]', text: 'text-[#e5484d]' };
+  if (percentile == null) return { dot: DS.gray400, text: DS.gray600 };
+  if (percentile >= 75) return { dot: DS.green, text: DS.greenDark };
+  if (percentile >= 25) return { dot: DS.amber, text: DS.amberDark };
+  return { dot: DS.red, text: DS.redDark };
 }
 
 function getTrendIcon(trend: string, percentile?: number | null) {
-  // Color trend arrows by percentile when available, otherwise by direction
-  const pColors = getPercentileColor(percentile);
-  if (trend === 'up') return <TrendingUp className={`w-3.5 h-3.5 ${percentile != null ? pColors.text : 'text-[#46a758]'}`} />;
-  if (trend === 'down') return <TrendingDown className={`w-3.5 h-3.5 ${percentile != null ? pColors.text : 'text-[#e5484d]'}`} />;
-  if (trend === 'stable') return <Minus className="w-3.5 h-3.5 text-[#666666]" />;
-  return <Minus className="w-3.5 h-3.5 text-[#a1a1a1]" />;
+  const pc = getPercentileColor(percentile);
+  const color = percentile != null ? pc.text : trend === 'up' ? DS.greenDark : trend === 'down' ? DS.redDark : DS.gray500;
+  if (trend === 'up') return <TrendingUp className="w-3.5 h-3.5" style={{ color }} />;
+  if (trend === 'down') return <TrendingDown className="w-3.5 h-3.5" style={{ color }} />;
+  if (trend === 'stable') return <Minus className="w-3.5 h-3.5" style={{ color: DS.gray500 }} />;
+  return <Minus className="w-3.5 h-3.5" style={{ color: DS.gray400 }} />;
 }
 
-const statusColors = {
-  good: 'text-[#46a758]',
-  warning: 'text-[#f5a524]',
-  critical: 'text-[#e5484d]',
-  neutral: 'text-[#666666]',
-};
+function getKpiValueColor(status: string) {
+  if (status === 'good') return DS.greenDark;
+  if (status === 'warning') return DS.amberDark;
+  if (status === 'critical') return DS.redDark;
+  return DS.gray700;
+}
+
+function getKpiBarColor(status: string) {
+  if (status === 'good') return DS.green;
+  if (status === 'warning') return DS.amber;
+  if (status === 'critical') return DS.red;
+  return DS.gray400;
+}
 
 // ---------------------------------------------------------------------------
-// Score Timeline Sparkline (SVG)
+// Score Timeline Sparkline
 // ---------------------------------------------------------------------------
 function ScoreSparkline({ history }: { history: Deal['scoreHistory'] }) {
   if (!history || history.length < 2) return null;
 
-  const width = 140;
-  const height = 36;
+  const width = 120;
+  const height = 32;
   const padX = 4;
-  const padY = 6;
+  const padY = 4;
 
   const scores = history.map((h) => h.score);
   const minScore = Math.min(...scores);
@@ -97,42 +115,28 @@ function ScoreSparkline({ history }: { history: Deal['scoreHistory'] }) {
   const lastPt = history[history.length - 1];
   const prevPt = history[history.length - 2];
   const delta = lastPt.score - prevPt.score;
-  const lastX = padX + ((history.length - 1) / (history.length - 1)) * (width - padX * 2);
+  const lastX = padX + 1 * (width - padX * 2);
   const lastY = padY + (1 - (lastPt.score - minScore) / range) * (height - padY * 2);
-
-  const lineColor = delta >= 0 ? '#46a758' : '#e5484d';
-
-  const areaPoints = [
-    `${padX},${height - padY}`,
-    ...points,
-    `${lastX},${height - padY}`,
-  ].join(' ');
+  const lineColor = delta >= 0 ? DS.green : DS.red;
 
   return (
     <div className="flex items-center gap-2">
       <svg width={width} height={height} className="shrink-0">
-        <defs>
-          <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={lineColor} stopOpacity={0.2} />
-            <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <polygon points={areaPoints} fill="url(#sparkFill)" />
         <polyline
           points={points.join(' ')}
           fill="none"
           stroke={lineColor}
-          strokeWidth={2}
+          strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx={lastX} cy={lastY} r={3} fill={lineColor} />
+        <circle cx={lastX} cy={lastY} r={2.5} fill={lineColor} />
       </svg>
       <div className="text-right shrink-0">
-        <span className={`text-xs font-semibold ${delta >= 0 ? 'text-[#46a758]' : 'text-[#e5484d]'}`}>
+        <span className="font-mono text-[12px] font-500" style={{ color: delta >= 0 ? DS.greenDark : DS.redDark }}>
           {delta >= 0 ? '+' : ''}{delta}
         </span>
-        <p className="text-[10px] text-[#a1a1a1]">{history.length} runs</p>
+        <p className="font-mono text-[10px]" style={{ color: DS.gray400 }}>{history.length} runs</p>
       </div>
     </div>
   );
@@ -141,40 +145,29 @@ function ScoreSparkline({ history }: { history: Deal['scoreHistory'] }) {
 // ---------------------------------------------------------------------------
 // KPI Benchmark Bar
 // ---------------------------------------------------------------------------
-function BenchmarkBar({
-  value,
-  low,
-  high,
-  status,
-}: {
-  value: string;
-  low: number;
-  high: number;
-  status: string;
-}) {
+function BenchmarkBar({ value, low, high, status }: { value: string; low: number; high: number; status: string }) {
   const numericValue = parseFloat(value.replace(/[^0-9.\-]/g, ''));
   if (isNaN(numericValue)) return null;
 
   const range = high - low || 1;
   const pct = Math.max(0, Math.min(100, ((numericValue - low) / range) * 100));
-  const barColor = statusBarColors[status as keyof typeof statusBarColors] || statusBarColors.neutral;
+  const barColor = getKpiBarColor(status);
 
   return (
     <div className="mt-2">
-      <div className="relative h-1.5 bg-[#eaeaea] rounded-full overflow-hidden">
-        <div className="absolute inset-0 rounded-full" />
+      <div className="relative h-[6px] rounded-[3px] overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
         <div
-          className="absolute top-0 h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, backgroundColor: barColor, opacity: 0.4 }}
+          className="absolute top-0 h-full rounded-[3px] transition-all duration-500"
+          style={{ width: `${pct}%`, backgroundColor: barColor, opacity: 0.35 }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border-2 border-white transition-all duration-500"
-          style={{ left: `calc(${pct}% - 5px)`, backgroundColor: barColor }}
+          className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border-2 border-white transition-all duration-500"
+          style={{ left: `calc(${pct}% - 4px)`, backgroundColor: barColor }}
         />
       </div>
       <div className="flex justify-between mt-1">
-        <span className="text-[9px] text-[#a1a1a1]">{low}</span>
-        <span className="text-[9px] text-[#a1a1a1]">{high}</span>
+        <span className="font-mono text-[10px]" style={{ color: DS.gray400 }}>{low}</span>
+        <span className="font-mono text-[10px]" style={{ color: DS.gray400 }}>{high}</span>
       </div>
     </div>
   );
@@ -185,64 +178,60 @@ function BenchmarkBar({
 // ---------------------------------------------------------------------------
 export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props) {
   const { cockpit, signals } = analysis;
-  const risk = riskColors[cockpit.riskLevel];
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
-  // Bar chart data (removed radar chart - redundant)
+  const riskCfg = riskConfig[cockpit.riskLevel] || riskConfig.moderate;
+
+  // Bar chart data
   const barData = cockpit.categoryScores.map((cs) => ({
-    name: cs.category.length > 18 ? cs.category.slice(0, 18) + '...' : cs.category,
+    name: cs.category.length > 20 ? cs.category.slice(0, 20) + '...' : cs.category,
     fullName: cs.category,
     score: cs.score,
     max: cs.maxScore,
     color: cs.color,
   }));
 
-  // Deal Rating score ring
+  // Score ring
   const scorePercent = cockpit.overallScore;
   const circumference = 2 * Math.PI * 45;
   const offset = circumference - (scorePercent / 100) * circumference;
-  const scoreColor =
-    scorePercent >= 70 ? '#46a758' : scorePercent >= 50 ? '#f5a524' : '#e5484d';
+  const scoreColor = scorePercent >= 70 ? DS.green : scorePercent >= 50 ? DS.amber : DS.red;
 
   const summaryText = cockpit.businessSummary || cockpit.recommendation || 'N/A';
 
   // Signal counts
   const signalCounts = [
-    { key: 'buyingSignals', label: 'Buy Signals', count: signals.buyingSignals.length, color: '#46a758', icon: TrendingUp },
-    { key: 'redFlags', label: 'Red Flags', count: signals.redFlags.length, color: '#e5484d', icon: AlertTriangle },
-    { key: 'inconsistencies', label: 'Oddities', count: signals.inconsistencies.length, color: '#f97316', icon: AlertCircle },
-    { key: 'dataGaps', label: 'Data Gaps', count: signals.dataGaps.length, color: '#0070f3', icon: FileQuestion },
+    { key: 'buyingSignals', label: 'Buy', count: signals.buyingSignals.length, color: DS.green, icon: TrendingUp },
+    { key: 'redFlags', label: 'Flags', count: signals.redFlags.length, color: DS.red, icon: AlertTriangle },
+    { key: 'inconsistencies', label: 'Odd', count: signals.inconsistencies.length, color: DS.amber, icon: AlertCircle },
+    { key: 'dataGaps', label: 'Gaps', count: signals.dataGaps.length, color: DS.purple, icon: FileQuestion },
   ];
 
-  const totalSignals = signalCounts.reduce((sum, s) => sum + s.count, 0);
   const criticalCount = [...signals.redFlags, ...signals.inconsistencies].filter(
     (s) => s.severity === 'critical' || s.severity === 'high'
   ).length;
 
   return (
-    <div className="max-w-6xl mx-auto animate-fade-in space-y-5">
+    <div className="max-w-6xl mx-auto animate-fade-in space-y-6">
 
-      {/* ===== ROW 1: Signals (Hero) + Deal Rating + Risk Level ===== */}
+      {/* ===== ROW 1: Signals (Hero) + Deal Rating + Risk ===== */}
       <div className="grid grid-cols-12 gap-4">
 
-        {/* Signal Count — PRIMARY above-the-fold element */}
-        <div className="col-span-12 md:col-span-6 bg-white border border-[#eaeaea] rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+        {/* Signal Overview — primary above-the-fold element */}
+        <div className="col-span-12 md:col-span-6 rounded-[4px] p-5" style={{ boxShadow: 'var(--shadow-container)' }}>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-[#0f477b]" />
-              <p className="text-xs font-semibold text-[#888888] uppercase tracking-wider">
-                Signal Overview
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-[#171717]">{totalSignals}</span>
-              <span className="text-xs text-[#888888]">total signals</span>
-              {criticalCount > 0 && (
-                <span className="px-1.5 py-0.5 bg-[#e5484d]/10 text-[#e5484d] rounded text-[10px] font-semibold">
-                  {criticalCount} high priority
-                </span>
-              )}
-            </div>
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]" style={{ color: DS.gray400 }}>
+              Signal Overview
+            </p>
+            {criticalCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1.5 font-mono text-[12px] font-medium px-[10px] py-[3px] rounded-[2px]"
+                style={{ background: 'rgba(0,0,0,0.05)', color: DS.gray600 }}
+              >
+                <span className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: DS.red }} />
+                {criticalCount} high priority
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -250,41 +239,44 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
               <button
                 key={signal.key}
                 onClick={() => onNavigateSignals?.(signal.key)}
-                className="group flex flex-col items-center p-3 rounded-xl border border-[#eaeaea] hover:border-[#d4d4d4] hover:bg-[#fafafa] transition-all cursor-pointer"
+                className="group flex flex-col items-center py-3 px-2 rounded-[4px] border border-transparent hover:border-[var(--border-default)] transition-all cursor-pointer"
+                style={{ transition: 'border-color 0.1s ease, background 0.1s ease' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <signal.icon className="w-4 h-4 mb-1.5" style={{ color: signal.color }} />
-                <span className="text-2xl font-bold text-[#171717]">{signal.count}</span>
-                <span className="text-[10px] text-[#888888] font-medium mt-0.5">{signal.label}</span>
-                <ArrowRight className="w-3 h-3 text-[#a1a1a1] opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+                <span className="w-[7px] h-[7px] rounded-full mb-2" style={{ backgroundColor: signal.color }} />
+                <span className="font-mono text-[20px] font-medium" style={{ color: DS.black }}>{signal.count}</span>
+                <span className="font-mono text-[11px] mt-0.5" style={{ color: DS.gray400 }}>{signal.label}</span>
+                <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity mt-1" style={{ color: DS.gray400 }} />
               </button>
             ))}
           </div>
         </div>
 
-        {/* Deal Rating Score */}
-        <div className="col-span-6 md:col-span-3 bg-white border border-[#eaeaea] rounded-2xl p-5 flex flex-col items-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-          <p className="text-xs font-semibold text-[#888888] uppercase tracking-wider mb-3">
+        {/* Deal Rating */}
+        <div className="col-span-6 md:col-span-3 rounded-[4px] p-5 flex flex-col items-center" style={{ boxShadow: 'var(--shadow-container)' }}>
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] mb-3" style={{ color: DS.gray400 }}>
             Deal Rating
           </p>
-          <div className="relative w-24 h-24">
-            <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="45" fill="none" stroke="#eaeaea" strokeWidth="8" />
+          <div className="relative w-[88px] h-[88px]">
+            <svg className="w-[88px] h-[88px] -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="45" fill="none" stroke={DS.gray200} strokeWidth="7" />
               <circle
                 cx="50" cy="50" r="45" fill="none"
-                stroke={scoreColor} strokeWidth="8"
+                stroke={scoreColor} strokeWidth="7"
                 className="score-ring"
                 strokeDasharray={circumference}
                 strokeDashoffset={offset}
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-bold text-[#171717]">{cockpit.overallScore}</span>
-              <span className="text-[9px] text-[#888888]">/100</span>
+              <span className="font-heading text-[28px] font-700" style={{ color: DS.black }}>{cockpit.overallScore}</span>
+              <span className="font-mono text-[9px]" style={{ color: DS.gray400 }}>/100</span>
             </div>
           </div>
           {deal.scoreHistory && deal.scoreHistory.length > 1 && (
-            <div className="mt-3 pt-3 border-t border-[#eaeaea] w-full">
-              <p className="text-[10px] font-semibold text-[#888888] uppercase tracking-wider mb-1 flex items-center gap-1">
+            <div className="mt-3 pt-3 w-full" style={{ borderTop: `1px solid ${DS.gray200}` }}>
+              <p className="font-mono text-[10px] uppercase tracking-[0.05em] mb-1 flex items-center gap-1" style={{ color: DS.gray400 }}>
                 <Activity className="w-3 h-3" /> History
               </p>
               <ScoreSparkline history={deal.scoreHistory} />
@@ -292,109 +284,118 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
           )}
         </div>
 
-        {/* Risk Level */}
+        {/* Risk Level — left-border accent pattern */}
         <div className="col-span-6 md:col-span-3 flex flex-col gap-3">
-          <div className={`${risk.bg} border ${risk.border} rounded-2xl p-4 flex-1`}>
-            <div className="flex items-center gap-2 mb-2">
-              <Shield className={`w-4 h-4 ${risk.text}`} />
-              <p className="text-xs font-semibold text-[#888888] uppercase tracking-wider">
-                Risk Level
-              </p>
-            </div>
-            <p className={`text-lg font-bold ${risk.text} capitalize`}>{cockpit.riskLevel}</p>
+          <div
+            className="rounded-[4px] p-4 flex-1"
+            style={{
+              borderLeft: `3px solid ${riskCfg.borderColor}`,
+              boxShadow: 'var(--shadow-container)',
+            }}
+          >
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] mb-2" style={{ color: DS.gray400 }}>
+              Risk Level
+            </p>
+            <p className="font-heading text-[18px] font-600 capitalize" style={{ color: riskCfg.color }}>
+              {cockpit.riskLevel}
+            </p>
           </div>
 
-          {/* Quick highlights/risks count */}
-          <div className="bg-white border border-[#eaeaea] rounded-2xl p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+          {/* Highlights / Risks count */}
+          <div className="rounded-[4px] p-4" style={{ boxShadow: 'var(--shadow-container)' }}>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-[#666666] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3 h-3 text-[#46a758]" /> Highlights
+                <span className="font-body text-[12px] flex items-center gap-1.5" style={{ color: DS.gray600 }}>
+                  <span className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: DS.green }} />
+                  Highlights
                 </span>
-                <span className="text-sm font-bold text-[#46a758]">{cockpit.investmentHighlights.length}</span>
+                <span className="font-mono text-[13px] font-medium" style={{ color: DS.black }}>{cockpit.investmentHighlights.length}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-[#666666] flex items-center gap-1.5">
-                  <AlertTriangle className="w-3 h-3 text-[#e5484d]" /> Key Risks
+                <span className="font-body text-[12px] flex items-center gap-1.5" style={{ color: DS.gray600 }}>
+                  <span className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: DS.red }} />
+                  Key Risks
                 </span>
-                <span className="text-sm font-bold text-[#e5484d]">{cockpit.keyRisks.length}</span>
+                <span className="font-mono text-[13px] font-medium" style={{ color: DS.black }}>{cockpit.keyRisks.length}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ===== ROW 2: Next Steps (Elevated) + Compressed Summary ===== */}
+      {/* ===== ROW 2: Next Steps + Compressed Summary ===== */}
       <div className="grid grid-cols-12 gap-4">
 
-        {/* Recommended Next Steps — Elevated to prominent position */}
+        {/* Recommended Next Steps */}
         {cockpit.nextSteps?.length > 0 && (
-          <div className="col-span-12 md:col-span-7 bg-gradient-to-br from-[#0f477b]/[0.03] to-white border border-[#0f477b]/15 rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+          <div className="col-span-12 md:col-span-7 rounded-[4px] p-5" style={{ boxShadow: 'var(--shadow-container)' }}>
             <div className="flex items-center gap-2 mb-3">
-              <ListChecks className="w-4 h-4 text-[#0f477b]" />
-              <h3 className="text-sm font-semibold text-[#171717]">Recommended Next Steps</h3>
+              <ListChecks className="w-4 h-4" style={{ color: DS.purple }} />
+              <h3 className="font-heading text-[14px] font-500" style={{ color: DS.black }}>
+                Recommended Next Steps
+              </h3>
             </div>
             <div className="space-y-2">
               {cockpit.nextSteps.map((step, i) => (
-                <div key={i} className="flex items-start gap-2.5 p-2.5 bg-white/80 rounded-lg border border-[#eaeaea]">
-                  <span className="w-5 h-5 rounded-full bg-[#0f477b]/12 text-[#0f477b] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                <div key={i} className="flex items-start gap-2.5 py-2 px-3 rounded-[4px]" style={{ background: DS.gray100 }}>
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center font-mono text-[10px] font-medium shrink-0 mt-0.5"
+                    style={{ background: 'var(--purple-bg)', color: DS.purple }}
+                  >
                     {i + 1}
                   </span>
-                  <p className="text-sm text-[#666666] leading-relaxed">{step}</p>
+                  <p className="font-body text-[13px]" style={{ color: DS.gray600 }}>{step}</p>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Compressed Business Summary + Highlights/Risks */}
-        <div className={`${cockpit.nextSteps?.length > 0 ? 'col-span-12 md:col-span-5' : 'col-span-12'} bg-white border border-[#eaeaea] rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]`}>
+        {/* Business Summary (compressed) + Highlights / Risks */}
+        <div
+          className={`${cockpit.nextSteps?.length > 0 ? 'col-span-12 md:col-span-5' : 'col-span-12'} rounded-[4px] p-5`}
+          style={{ boxShadow: 'var(--shadow-container)' }}
+        >
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Lightbulb className="w-4 h-4 text-[#0f477b]" />
-              <p className="text-xs font-semibold text-[#888888] uppercase tracking-wider">
-                Business Summary
-              </p>
-            </div>
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]" style={{ color: DS.gray400 }}>
+              Business Summary
+            </p>
             <button
               onClick={() => setSummaryExpanded(!summaryExpanded)}
-              className="text-xs text-[#0f477b] hover:text-[#1a5c9e] flex items-center gap-0.5 transition-colors"
+              className="font-mono text-[11px] flex items-center gap-0.5 transition-colors"
+              style={{ color: DS.purple }}
             >
               {summaryExpanded ? 'Collapse' : 'Expand'}
               {summaryExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           </div>
-          <p className={`text-sm text-[#171717] leading-relaxed ${summaryExpanded ? '' : 'line-clamp-2'}`}>
+          <p className={`font-body text-[13px] leading-relaxed ${summaryExpanded ? '' : 'line-clamp-2'}`} style={{ color: DS.gray600 }}>
             {summaryText}
           </p>
 
-          {/* Highlights & Risks below summary */}
-          <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-[#eaeaea]">
+          {/* Highlights & Risks */}
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-3" style={{ borderTop: `1px solid var(--border-subtle)` }}>
             <div>
-              <p className="text-xs font-medium text-[#46a758] mb-1.5 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Highlights
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.05em] mb-2 flex items-center gap-1.5" style={{ color: DS.gray400 }}>
+                <span className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: DS.green }} />
+                Highlights
               </p>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {cockpit.investmentHighlights.slice(0, 3).map((h, i) => (
-                  <li
-                    key={i}
-                    className="text-xs text-[#666666] pl-3 relative before:content-[''] before:absolute before:left-0 before:top-1.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-[#46a758]/50"
-                  >
+                  <li key={i} className="font-body text-[12px] leading-relaxed" style={{ color: DS.gray600 }}>
                     {h}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="text-xs font-medium text-[#e5484d] mb-1.5 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> Key Risks
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.05em] mb-2 flex items-center gap-1.5" style={{ color: DS.gray400 }}>
+                <span className="w-[7px] h-[7px] rounded-full" style={{ backgroundColor: DS.red }} />
+                Key Risks
               </p>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {cockpit.keyRisks.slice(0, 3).map((r, i) => (
-                  <li
-                    key={i}
-                    className="text-xs text-[#666666] pl-3 relative before:content-[''] before:absolute before:left-0 before:top-1.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-[#e5484d]/50"
-                  >
+                  <li key={i} className="font-body text-[12px] leading-relaxed" style={{ color: DS.gray600 }}>
                     {r}
                   </li>
                 ))}
@@ -404,27 +405,32 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
         </div>
       </div>
 
-      {/* ===== ROW 3: KPIs with severity-aware percentile badges ===== */}
+      {/* ===== ROW 3: KPIs ===== */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <Target className="w-4 h-4 text-[#0f477b]" />
-          <h3 className="text-sm font-semibold text-[#171717]">Key Performance Indicators</h3>
+          <Target className="w-4 h-4" style={{ color: DS.purple }} />
+          <h3 className="font-heading text-[14px] font-500" style={{ color: DS.black }}>Key Performance Indicators</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {cockpit.kpis.map((kpi, i) => {
-            const pColor = getPercentileColor(kpi.percentile);
+            const pc = getPercentileColor(kpi.percentile);
             return (
               <div
                 key={i}
-                className="bg-white border border-[#eaeaea] rounded-xl p-4 hover:border-[#d4d4d4] transition-colors group shadow-[0_2px_8px_rgba(0,0,0,0.04)]"
+                className="rounded-[4px] p-4 border border-transparent hover:border-[var(--border-default)] transition-all"
+                style={{ boxShadow: 'var(--shadow-container)', transition: 'border-color 0.1s ease' }}
               >
-                {/* Header: name + trend + percentile */}
+                {/* Header */}
                 <div className="flex items-center justify-between mb-2 gap-2">
-                  <p className="text-xs text-[#888888] font-medium truncate">{kpi.name}</p>
+                  <p className="font-mono text-[11px] truncate" style={{ color: DS.gray400 }}>{kpi.name}</p>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {kpi.percentile != null && (
-                      <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${pColor.badge}`}>
-                        {kpi.percentile}th %ile
+                      <span
+                        className="inline-flex items-center gap-1 font-mono text-[10px] font-medium px-[8px] py-[2px] rounded-[2px]"
+                        style={{ background: 'rgba(0,0,0,0.05)', color: DS.gray600 }}
+                      >
+                        <span className="w-[6px] h-[6px] rounded-full" style={{ backgroundColor: pc.dot }} />
+                        {kpi.percentile}th
                       </span>
                     )}
                     {getTrendIcon(kpi.trend, kpi.percentile)}
@@ -432,38 +438,33 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
                 </div>
 
                 {/* Value */}
-                <p className={`text-xl font-bold ${statusColors[kpi.status]}`}>
+                <p className="font-mono text-[18px] font-medium" style={{ color: getKpiValueColor(kpi.status) }}>
                   {kpi.value}
                   {kpi.unit && (
-                    <span className="text-sm font-normal text-[#888888] ml-1">{kpi.unit}</span>
+                    <span className="font-mono text-[12px] font-normal ml-1" style={{ color: DS.gray400 }}>{kpi.unit}</span>
                   )}
                 </p>
 
                 {/* Benchmark text */}
                 {kpi.benchmark && (
-                  <p className="text-[10px] text-[#a1a1a1] mt-1">Benchmark: {kpi.benchmark}</p>
+                  <p className="font-mono text-[10px] mt-1" style={{ color: DS.gray400 }}>Benchmark: {kpi.benchmark}</p>
                 )}
 
-                {/* Benchmark bar visualization */}
+                {/* Benchmark bar */}
                 {kpi.benchmarkLow != null && kpi.benchmarkHigh != null && (
-                  <BenchmarkBar
-                    value={kpi.value}
-                    low={kpi.benchmarkLow}
-                    high={kpi.benchmarkHigh}
-                    status={kpi.status}
-                  />
+                  <BenchmarkBar value={kpi.value} low={kpi.benchmarkLow} high={kpi.benchmarkHigh} status={kpi.status} />
                 )}
 
                 {/* AI Commentary */}
                 {kpi.commentary && (
-                  <p className="text-[10px] text-[#888888] mt-2 italic leading-relaxed border-t border-[#eaeaea] pt-2">
+                  <p className="font-body text-[11px] italic leading-relaxed mt-2 pt-2" style={{ color: DS.gray500, borderTop: `1px solid var(--border-subtle)` }}>
                     {kpi.commentary}
                   </p>
                 )}
 
-                {/* Source reference */}
+                {/* Source */}
                 {kpi.source && (
-                  <p className="text-[9px] text-[#a1a1a1] mt-1.5 flex items-center gap-1">
+                  <p className="font-mono text-[10px] mt-1.5 flex items-center gap-1" style={{ color: DS.gray400 }}>
                     <FileText className="w-2.5 h-2.5" />
                     {kpi.source}
                   </p>
@@ -474,34 +475,35 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
         </div>
       </div>
 
-      {/* ===== ROW 4: Score Breakdown Bar Chart (radar removed — redundant) ===== */}
-      <div className="bg-white border border-[#eaeaea] rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-        <h3 className="text-sm font-semibold text-[#171717] mb-4">Category Score Breakdown</h3>
+      {/* ===== ROW 4: Score Breakdown ===== */}
+      <div className="rounded-[4px] p-5" style={{ boxShadow: 'var(--shadow-container)' }}>
+        <h3 className="font-heading text-[14px] font-500 mb-4" style={{ color: DS.black }}>Category Score Breakdown</h3>
         <ResponsiveContainer width="100%" height={Math.max(250, barData.length * 32)}>
           <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
-            <XAxis type="number" domain={[0, 10]} tick={{ fill: '#888888', fontSize: 10 }} />
+            <XAxis type="number" domain={[0, 10]} tick={{ fill: DS.gray400, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
             <YAxis
               dataKey="name"
               type="category"
-              tick={{ fill: '#666666', fontSize: 11 }}
-              width={140}
+              tick={{ fill: DS.gray600, fontSize: 11, fontFamily: 'JetBrains Mono' }}
+              width={150}
             />
             <Tooltip
               contentStyle={{
                 background: '#ffffff',
-                border: '1px solid #eaeaea',
-                borderRadius: '8px',
+                border: `1px solid ${DS.gray300}`,
+                borderRadius: '4px',
                 fontSize: '12px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                fontFamily: 'JetBrains Mono',
+                boxShadow: 'var(--shadow-elevated)',
               }}
-              labelStyle={{ color: '#171717' }}
-              itemStyle={{ color: '#666666' }}
+              labelStyle={{ color: DS.black }}
+              itemStyle={{ color: DS.gray600 }}
               formatter={(value: any, _name: any, props: any) => [
                 `${value} / ${props.payload.max}`,
                 props.payload.fullName,
               ]}
             />
-            <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={18}>
+            <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={16}>
               {barData.map((entry, i) => (
                 <Cell key={i} fill={entry.color} />
               ))}
@@ -510,13 +512,6 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
         </ResponsiveContainer>
       </div>
 
-      {/* ===== Footer ===== */}
-      <div className="text-center py-3">
-        <p className="text-xs text-[#a1a1a1]">
-          Analysis generated {new Date(analysis.analyzedAt).toLocaleString()} &middot; Powered by
-          Claude AI
-        </p>
-      </div>
     </div>
   );
 }

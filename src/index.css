@@ -1,18 +1,63 @@
 @import "tailwindcss";
 
 @theme {
-  /* Gemspring brand */
-  --color-brand: #0f477b;
-  --color-brand-light: #1a5c9e;
-  --color-brand-dark: #0a3359;
+  /* Talonic Design System Tokens */
 
-  /* Geist semantic accents */
-  --color-accent-green: #46a758;
-  --color-accent-yellow: #f5a524;
-  --color-accent-red: #e5484d;
-  --color-accent-blue: #0070f3;
-  --color-accent-orange: #f97316;
-  --color-accent-purple: #7c3aed;
+  /* Grayscale */
+  --color-ds-black: #0a0a0a;
+  --color-ds-gray-700: #404040;
+  --color-ds-gray-600: #525252;
+  --color-ds-gray-500: #737373;
+  --color-ds-gray-400: #a3a3a3;
+  --color-ds-gray-300: #d4d4d4;
+  --color-ds-gray-200: #e5e5e5;
+  --color-ds-gray-100: #f5f5f5;
+  --color-ds-gray-50: #fafafa;
+
+  /* Functional */
+  --color-ds-green: #4A9E8E;
+  --color-ds-green-dark: #3D8578;
+  --color-ds-amber: #B8914A;
+  --color-ds-amber-dark: #9A7A3E;
+  --color-ds-red: #C45B5B;
+  --color-ds-red-dark: #A84C4C;
+
+  /* Brand */
+  --color-ds-purple: #673ab7;
+  --color-ds-purple-dark: #5e35b1;
+
+  /* Legacy compat — map old brand to purple */
+  --color-brand: #673ab7;
+  --color-brand-light: #7c4dcc;
+  --color-brand-dark: #5e35b1;
+}
+
+:root {
+  /* Talonic surfaces */
+  --surface-page: #ffffff;
+  --surface-card: #ffffff;
+  --surface-inset: #fafafa;
+  --surface-hover: rgba(0,0,0,0.015);
+  --surface-active: rgba(0,0,0,0.03);
+
+  /* Talonic borders */
+  --border-default: #d4d4d4;
+  --border-subtle: rgba(0,0,0,0.04);
+
+  /* Talonic shadows */
+  --shadow-container: 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-elevated: 0 0 0 1px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+
+  /* Talonic functional bg tints */
+  --green-bg: rgba(74,158,142,0.08);
+  --amber-bg: rgba(184,145,74,0.08);
+  --red-bg: rgba(196,91,91,0.08);
+  --purple-bg: rgba(103,58,183,0.08);
+
+  /* Fonts */
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-body: 'Inter', sans-serif;
 }
 
 * {
@@ -21,9 +66,9 @@
 }
 
 body {
-  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #ffffff;
-  color: #171717;
+  font-family: var(--font-body);
+  background: var(--surface-page);
+  color: #0a0a0a;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -37,11 +82,6 @@ body {
   to { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 71, 123, 0.3); }
-  50% { box-shadow: 0 0 0 8px rgba(15, 71, 123, 0); }
-}
-
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
@@ -50,30 +90,13 @@ body {
   animation: slideIn 0.3s ease-out;
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 2s infinite;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-6px); }
-  40% { transform: translateX(6px); }
-  60% { transform: translateX(-4px); }
-  80% { transform: translateX(4px); }
-}
-
-.animate-shake {
-  animation: shake 0.4s ease-out;
-}
-
-.glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(234, 234, 234, 0.6);
-}
-
 .score-ring {
   stroke-dasharray: 283;
   stroke-linecap: round;
   transition: stroke-dashoffset 1s ease-out;
 }
+
+/* Talonic utility classes */
+.font-heading { font-family: var(--font-heading); }
+.font-mono { font-family: var(--font-mono); }
+.font-body { font-family: var(--font-body); }
