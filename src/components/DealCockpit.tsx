@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { DealAnalysis, Deal } from '../types';
+import type { DealAnalysis, Deal, KPI } from '../types';
 import {
   BarChart,
   Bar,
@@ -22,15 +22,18 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   ArrowRight,
   FileQuestion,
   AlertCircle,
 } from 'lucide-react';
+import MetricDrillPanel from './MetricDrillPanel';
 
 interface Props {
   analysis: DealAnalysis;
   deal: Deal;
   onNavigateSignals?: (category?: string) => void;
+  onAskQuestion?: (question: string) => void;
 }
 
 // Talonic functional colors (desaturated, professional)
@@ -176,9 +179,10 @@ function BenchmarkBar({ value, low, high, status }: { value: string; low: number
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
-export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props) {
+export default function DealCockpit({ analysis, deal, onNavigateSignals, onAskQuestion }: Props) {
   const { cockpit, signals } = analysis;
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const [drillMetric, setDrillMetric] = useState<KPI | null>(null);
 
   const riskCfg = riskConfig[cockpit.riskLevel] || riskConfig.moderate;
 
@@ -415,14 +419,15 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
           {cockpit.kpis.map((kpi, i) => {
             const pc = getPercentileColor(kpi.percentile);
             return (
-              <div
+              <button
                 key={i}
-                className="rounded-[4px] p-4 border border-transparent hover:border-[var(--border-default)] transition-all"
+                onClick={() => setDrillMetric(kpi)}
+                className="group rounded-[4px] p-4 border border-transparent hover:border-[var(--border-default)] transition-all text-left cursor-pointer"
                 style={{ boxShadow: 'var(--shadow-container)', transition: 'border-color 0.1s ease' }}
               >
                 {/* Header */}
                 <div className="flex items-center justify-between mb-2 gap-2">
-                  <p className="font-mono text-[11px] truncate" style={{ color: DS.gray400 }}>{kpi.name}</p>
+                  <p className="font-mono text-[11px] truncate group-hover:underline group-hover:decoration-[#673ab7]/40 group-hover:underline-offset-2" style={{ color: DS.gray400 }}>{kpi.name}</p>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {kpi.percentile != null && (
                       <span
@@ -434,6 +439,7 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
                       </span>
                     )}
                     {getTrendIcon(kpi.trend, kpi.percentile)}
+                    <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: DS.purple }} />
                   </div>
                 </div>
 
@@ -469,7 +475,7 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
                     {kpi.source}
                   </p>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -511,6 +517,16 @@ export default function DealCockpit({ analysis, deal, onNavigateSignals }: Props
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Metric Drill-Down Panel */}
+      {drillMetric && (
+        <MetricDrillPanel
+          metric={drillMetric}
+          dealId={deal.id}
+          onClose={() => setDrillMetric(null)}
+          onAskQuestion={onAskQuestion}
+        />
+      )}
 
     </div>
   );

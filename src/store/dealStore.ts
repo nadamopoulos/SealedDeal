@@ -9,6 +9,11 @@ import {
   deleteDealApi,
 } from '../services/api';
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface DealStore {
   deals: Deal[];
   activeDealId: string | null;
@@ -16,6 +21,15 @@ interface DealStore {
   analysisProgress: string;
   isAuthenticated: boolean;
   isLoading: boolean;
+
+  // Chat widget state
+  chatOpen: boolean;
+  chatMessages: ChatMessage[];
+  pendingPrompt: string | null;
+  setChatOpen: (open: boolean) => void;
+  addChatMessage: (msg: ChatMessage) => void;
+  setPendingPrompt: (prompt: string | null) => void;
+  clearChat: () => void;
 
   login: (password: string) => boolean;
   logout: () => void;
@@ -52,6 +66,16 @@ export const useDealStore = create<DealStore>()(
       analysisProgress: '',
       isAuthenticated: false,
       isLoading: false,
+
+      // Chat widget
+      chatOpen: false,
+      chatMessages: [],
+      pendingPrompt: null,
+      setChatOpen: (open) => set({ chatOpen: open }),
+      addChatMessage: (msg) =>
+        set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+      setPendingPrompt: (prompt) => set({ pendingPrompt: prompt }),
+      clearChat: () => set({ chatMessages: [], pendingPrompt: null }),
 
       login: (password) => {
         if (password === 'HowyBuysCompanies') {

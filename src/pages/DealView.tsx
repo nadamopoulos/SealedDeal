@@ -10,7 +10,7 @@ import PlaybookView from '../components/PlaybookView';
 import StructuredDataView from '../components/StructuredDataView';
 import SignalsView from '../components/SignalsView';
 import DealCockpit from '../components/DealCockpit';
-import DealQA from '../components/DealQA';
+import FloatingChat from '../components/FloatingChat';
 import ICMemoExport from '../components/ICMemoExport';
 import {
   ArrowLeft,
@@ -24,7 +24,6 @@ import {
   BookOpen,
   Database,
   Loader2,
-  MessageCircle,
   FileDown,
   ChevronDown,
 } from 'lucide-react';
@@ -35,7 +34,6 @@ const tabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] = [
   { id: 'playbook', label: 'DD Playbook', icon: <Target className="w-4 h-4" /> },
   { id: 'data', label: 'Structured Data', icon: <Database className="w-4 h-4" /> },
   { id: 'signals', label: 'Signals & Flags', icon: <AlertTriangle className="w-4 h-4" /> },
-  { id: 'qa', label: 'Ask the Deal', icon: <MessageCircle className="w-4 h-4" /> },
   { id: 'documents', label: 'Documents', icon: <FileText className="w-4 h-4" /> },
 ];
 
@@ -56,10 +54,17 @@ export default function DealView() {
     setIsAnalyzing,
     analysisProgress,
     setAnalysisProgress,
+    chatOpen,
+    setChatOpen,
+    chatMessages,
+    addChatMessage,
+    pendingPrompt,
+    setPendingPrompt,
+    clearChat,
   } = useDealStore();
 
   const deal = getDeal(dealId!);
-  const [activeTab, setActiveTab] = useState<AnalysisTab>(deal?.analysis ? 'cockpit' : 'documents');
+  const [activeTab, setActiveTab] = useState<AnalysisTab>(deal?.analysis ? 'playbook' : 'documents');
   const [uploadError, setUploadError] = useState('');
   const [showMemo, setShowMemo] = useState(false);
   const [showStageMenu, setShowStageMenu] = useState(false);
@@ -74,13 +79,17 @@ export default function DealView() {
     if (dealId) {
       setActiveDeal(dealId);
       loadDeal(dealId);
+      clearChat();
     }
-    return () => setActiveDeal(null);
-  }, [dealId, setActiveDeal, loadDeal]);
+    return () => {
+      setActiveDeal(null);
+      setChatOpen(false);
+    };
+  }, [dealId, setActiveDeal, loadDeal, clearChat, setChatOpen]);
 
   useEffect(() => {
     if (deal?.analysis && activeTab === 'documents') {
-      setActiveTab('cockpit');
+      setActiveTab('playbook');
     }
   }, [deal?.analysis]);
 
@@ -163,7 +172,7 @@ export default function DealView() {
       });
 
       setAnalysis(deal.id, result.analysis);
-      setActiveTab('cockpit');
+      setActiveTab('playbook');
       setAnalysisProgress('');
     } catch (err: any) {
       setUploadError(err.message);
@@ -305,17 +314,16 @@ export default function DealView() {
 
           <div className="flex gap-1 overflow-x-auto">
             {tabs.map((tab) => {
-              const disabled = tab.id !== 'documents' && tab.id !== 'qa' && !deal.analysis;
-              const qaDisabled = tab.id === 'qa' && deal.documents.length === 0;
+              const disabled = tab.id !== 'documents' && !deal.analysis;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => !disabled && !qaDisabled && setActiveTab(tab.id)}
-                  disabled={disabled || qaDisabled}
+                  onClick={() => !disabled && setActiveTab(tab.id)}
+                  disabled={disabled}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                     activeTab === tab.id
                       ? 'bg-[#0f477b]/10 text-[#0f477b] border border-[#0f477b]/20'
-                      : disabled || qaDisabled
+                      : disabled
                       ? 'text-[#a1a1a1] cursor-not-allowed'
                       : 'text-[#666666] hover:text-[#171717] hover:bg-[#f5f5f5]'
                   }`}
@@ -341,13 +349,21 @@ export default function DealView() {
           />
         )}
         {activeTab === 'cockpit' && deal.analysis && (
-          <DealCockpit analysis={deal.analysis} deal={deal} onNavigateSignals={() => setActiveTab('signals')} />
+          <DealCockpit
+            analysis={deal.analysis}
+            deal={deal}
+            onNavigateSignals={() => setActiveTab('signals')}
+            onAskQuestion={(question) => {
+              sessionStorage.setItem(`pending-qa-${deal.id}`, question);
+              setActiveTab('qa');
+            }}
+          />
         )}
         {activeTab === 'summary' && deal.analysis && (
           <CompanySummary deal={deal} />
         )}
         {activeTab === 'playbook' && deal.analysis && (
-          <PlaybookView playbook={deal.analysis.playbook} />
+          <PlaybookView playbook={deal.analysis.playbook} dealName={deal.name} company={deal.company} />
         )}
         {activeTab === 'data' && deal.analysis && (
           <StructuredDataView data={deal.analysis.structuredData} />
@@ -355,14 +371,23 @@ export default function DealView() {
         {activeTab === 'signals' && deal.analysis && (
           <SignalsView signals={deal.analysis.signals} />
         )}
-        {activeTab === 'qa' && (
-          <DealQA deal={deal} />
-        )}
       </div>
 
       {showMemo && deal.analysis && (
         <ICMemoExport deal={deal} analysis={deal.analysis} onClose={() => setShowMemo(false)} />
       )}
+
+      <FloatingChat
+        dealId={deal.id}
+        deal={deal}
+        documents={deal.documents}
+        isOpen={chatOpen}
+        onToggle={setChatOpen}
+        pendingPrompt={pendingPrompt}
+        onClearPendingPrompt={() => setPendingPrompt(null)}
+        chatMessages={chatMessages}
+        onAddMessage={addChatMessage}
+      />
     </div>
   );
 }
